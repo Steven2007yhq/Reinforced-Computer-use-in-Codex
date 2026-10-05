@@ -1,0 +1,61 @@
+name: Bug report / 问题报告
+description: Report a reproducible installation or UI-workflow problem / 报告可复现的问题
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please use a synthetic page or placeholder data. Read CONTRIBUTING.md and docs/PRIVACY.md before attaching anything.
+        请优先使用合成页面或占位数据；提交前阅读贡献与隐私说明，不要上传私人界面截图或原始日志。
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version / 插件版本
+      placeholder: v0.2.2, commit hash, or unknown / 未知
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Public environment details / 公开环境信息
+      description: OS/version and architecture, Node version, Codex version. Unknown is fine. No device names, account names, serial numbers, or private paths.
+      placeholder: "OS: Windows 11 x64; Node: 24; Codex: version or unknown"
+    validations:
+      required: true
+  - type: dropdown
+    id: feature_surface
+    attributes:
+      label: Available Codex interface / 可用的 Codex 接口
+      options:
+        - Browser interface / 浏览器接口
+        - Native desktop interface / 原生桌面接口
+        - Browser and native desktop / 两者均可用
+        - Neither / 均不可用
+        - Unknown / 不确定
+    validations:
+      required: true
+  - type: dropdown
+    id: plan_mode
+    attributes:
+      label: Planning mode / 计划模式
+      options:
+        - Default local plan / 默认本地计划
+        - Optional Jev planning / 可选 Jev 计划
+        - Unknown or installation issue / 不确定或安装问题
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and result / 复现步骤与结果
+      description: Minimal steps, expected behavior, actual behavior, and sanitized error excerpts if useful. Do not include credential or personal data.
+      placeholder: "1. ...\nExpected / 预期: ...\nActual / 实际: ..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check / 隐私核对
+      options:
+        - label: I removed secrets, personal content, and private paths, and did not attach private configs, raw logs/traces, or private-app screenshots. / 已移除密钥、个人内容与私人路径，未附个人配置、原始日志轨迹或私人应用截图。
+          required: true

@@ -1,0 +1,30 @@
+name: Feature request / 功能建议
+description: Describe a concrete UI-workflow or documentation need / 描述具体需求
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case / 问题与使用场景
+      description: Explain the task and who it helps. Use placeholder examples; private site/account details are unnecessary.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Desired behavior / 希望实现的行为
+      description: Describe the expected outcome and any clear action boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Relevant environment / 相关环境
+      description: If relevant, OS family/version, architecture, and browser/native desktop interface. Unknown is fine; omit private device/account identifiers.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check / 隐私核对
+      options:
+        - label: This request contains no credentials, personal content, private paths, or private-app screenshots. / 建议中不含密钥、个人内容、私人路径或私人应用截图。
+          required: true

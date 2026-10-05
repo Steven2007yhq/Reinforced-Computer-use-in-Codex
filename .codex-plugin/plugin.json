@@ -1,16 +1,16 @@
 {
   "name": "reinforced-computer-use",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Windows-first bounded Computer Use loops with a local deterministic fast path, optional Jev decisions, safety handoffs, and independent verification.",
   "author": {
-    "name": "Personal local plugin"
+    "name": "Steven2007yhq"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Reinforced Computer Use",
-    "shortDescription": "Windows 多步骤界面操作的安全快速执行层",
-    "longDescription": "Codex 负责目标、权限和最终验收；本插件在一次 Computer Use 调用中执行已知步骤，或让可选 Jev 决策器从严格白名单动作中选择下一步。所有动作都会重新观察、校验目标，并在高风险控件前交还 Codex。",
-    "developerName": "Personal local plugin",
+    "shortDescription": "Windows 优先的多步骤界面操作与长网页捕获",
+    "longDescription": "Codex 负责目标、权限和最终验收；本插件通过现有 Computer Use 接口执行有范围和预算限制的本地计划，或让可选 Jev 决策器从允许的动作中选择下一步。每次动作前重新观察和校验目标；识别到需审批的控件、状态不确定或验收失败时交还 Codex。",
+    "developerName": "Steven2007yhq",
     "category": "Productivity",
     "capabilities": [],
     "defaultPrompt": "Use Reinforced Computer Use to complete this Windows UI workflow with a bounded fast loop and independently verify the result."

@@ -25,9 +25,23 @@ coverage/
 *.jpg
 *.jpeg
 *.webp
+*.gif
 *.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
+*.m4v
 *.zip
 *.bak*
 *.tmp*
 .DS_Store
 Thumbs.db
+
+# Exact, manually reviewed assets from the synthetic public demo.
+!docs/assets/demo-top.png
+!docs/assets/demo-bottom.png
+!docs/assets/demo-full.png
+!docs/assets/social-preview.png
+!docs/assets/demo-preview.gif
+!docs/assets/demo-video.mp4
