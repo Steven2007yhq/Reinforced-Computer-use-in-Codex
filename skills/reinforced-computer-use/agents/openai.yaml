@@ -1,0 +1,7 @@
+interface:
+  display_name: "Reinforced Computer Use"
+  short_description: "Windows UI fast loops with guarded Jev decisions"
+  brand_color: "#6D5EF5"
+  default_prompt: "Use $reinforced-computer-use to execute this Windows UI workflow in a bounded fast loop and independently verify the result."
+policy:
+  allow_implicit_invocation: true

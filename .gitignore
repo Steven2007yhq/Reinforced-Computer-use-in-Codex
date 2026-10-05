@@ -1,0 +1,33 @@
+# Installed dependencies and repository metadata are never release payloads.
+node_modules/
+
+# Credentials, local provider metadata, and temporary bridge tokens.
+.env
+.env.*
+!.env.example
+config.json
+bridge.json
+*.pem
+*.key
+*.pfx
+*.p12
+credentials*.json
+
+# Local observations, traces, screenshots, recordings, and test output.
+output/
+outputs/
+work/
+traces/
+logs/
+coverage/
+*.log
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+*.zip
+*.bak*
+*.tmp*
+.DS_Store
+Thumbs.db

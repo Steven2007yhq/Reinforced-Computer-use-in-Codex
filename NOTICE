@@ -1,0 +1,20 @@
+The design of the optional Jev decision loop was informed by the MIT-licensed
+projects jev-browser-use (wy-coliney) and jev-desktop (yikangy873-gif). This
+plugin is an independent Windows-first implementation with a local deterministic
+mode, narrowed data boundary, confirmation handoffs, and its own runtime/tests.
+
+Long-page screenshot composition uses jpeg-js (BSD-3-Clause) and pngjs (MIT).
+Their license files are included in node_modules after npm ci; dependency source
+and runtime artifacts are not included in this source repository.
+
+Upstream project references (design inspiration, not bundled applications):
+https://github.com/wy-coliney/jev-browser-use (MIT)
+https://github.com/yikangy873-gif/jev-desktop (MIT)
+
+Dependency sources and licenses:
+https://github.com/jpeg-js/jpeg-js (BSD-3-Clause)
+https://github.com/pngjs/pngjs (MIT)
+
+The MIT license in this repository covers this independent integration and its
+documentation. It does not redistribute or grant rights to Codex, OpenAI's
+Computer Use runtime, Jev model weights, provider services, or user data.
