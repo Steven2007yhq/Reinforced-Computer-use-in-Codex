@@ -25,7 +25,9 @@ Start with the [synthetic local demo](DEMO.md). It removes login, provider acces
 | Symptom / status | Meaning and next step |
 | --- | --- |
 | No Computer Use tool is available | The current chat cannot perform the UI task. The plugin cannot enable CUA; inspect your Codex setup and current tool exposure. |
-| Browser works, but no native app can be bound | Browser and native surfaces are separate. Native desktop operation requires a native CUA interface and an exact accessible window. A running process alone is not proof. |
+| Browser works, but no native app can be bound | Browser and native surfaces are separate. For Windows, inspect the documented `@oai/sky` window inventory and bind one exact returned `Window` through [the Sky adapter](../skills/reinforced-computer-use/references/sky-adapter.md), or use an available legacy native CUA target. A running process alone is not proof. |
+| `SKY_ACCESSIBILITY_UNAVAILABLE` | The native service did not return AX. The batch stops before input; use ordinary Computer Use with a fresh screenshot. Do not fabricate indexed controls. |
+| `BRIDGE_NOT_RUNNING` in REPL while the terminal bridge is running | The REPL may lack global `process`, so the default descriptor path can differ. Pass the explicit `descriptorPath` derived from this machine's terminal `configPath`; see [Jev setup](../skills/reinforced-computer-use/references/jev-setup.md). |
 | First CUA call rejects plugin imports | Initialize with exactly one documented entry call, read its returned documentation, and only then import runtime helpers. See [the skill](../skills/reinforced-computer-use/SKILL.md). |
 | Missing or duplicate control labels | Inspect fresh UI state with ordinary Computer Use. Use exact observed labels and narrow allowances; do not broaden a regex merely to force a match. |
 | `needs_codex_review` / `needs_codex` | Inspect the current state and hand control back to Codex. The label may be sensitive, a frame may lack origin authorization, or the interface may need direct inspection. Follow the current CUA permission policy. |

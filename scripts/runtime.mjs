@@ -6,14 +6,18 @@ const SCROLLABLE = /^(?:scroll area|web area|list|outline|table)$/i;
 const SENSITIVE = /password|passwd|api[_ -]?key|secret|bearer\s|验证码|密码|密钥|secure.?text|one.?time.?code|verification.?code|captcha|credit.?card|银行卡/i;
 const CONSEQUENTIAL = /发送|发布|提交|支付|付款|购买|下单|删除|清空|授权|允许|上传|登录|安装|同意|转账|订阅|退订|创建账户|验证码|人机验证|send\b|publish\b|submit\b|pay\b|purchase\b|buy\b|delete\b|erase\b|grant\b|allow\b|upload\b|sign.?in|log.?in|install\b|accept\b|transfer\b|checkout\b|subscribe\b|unsubscribe\b|create.?account|captcha/i;
 const FILE_PICKER = /choose.*file|select.*file|browse.*file|选择.*文件|浏览.*文件/i;
-const FORBIDDEN_KEY = /^(?:Return|Enter|Delete|BackSpace)$|(?:ctrl|control|meta|super|cmd)\+(?:Return|Enter|Delete|BackSpace)/i;
 const LOCALIZED_ROLES = Object.freeze({
   按钮: 'button', 文本栏: 'text field', 文本字段: 'text field', 文本区域: 'text area',
   搜索文本栏: 'search field', 复选框: 'checkbox', 单选按钮: 'radio button', 菜单项: 'menu item',
   链接: 'link', 滚动区域: 'scroll area', 表格: 'table', 列表: 'list', 大纲: 'outline', 标签页: 'tab',
+  窗口: 'window', 窗格: 'pane', 工具栏: 'tool bar', 编辑: 'text field', 组合框: 'combo box',
+  标题栏: 'title bar', 列表项目: 'list item', 菜单栏: 'menu bar', 菜单: 'menu', 标头: 'header', 标头项: 'header item', 标头项目: 'header item',
+  对话框: 'dialog', 图像: 'image',
+  文本: 'text', 文档: 'document', 状态栏: 'status bar', 分隔符: 'separator', 滚动条: 'scroll bar',
 });
 const ROLE = `(?:AX)?(?:secure text field|disclosure triangle|pop up button|radio button|scroll area|search field|text entry area|text field|text area|menu item|check box|combo box|web area|${Object.keys(LOCALIZED_ROLES).sort((a, b) => b.length - a.length).join('|')}|[A-Za-z][A-Za-z0-9_-]*)`;
 const LINE = new RegExp(`^\\s*(?:\\[(\\d+)\\]|(\\d+))\\s+(${ROLE})(?:\\s+(.*))?$`, 'i');
+const compiledOptions = new WeakSet();
 
 function normalizeRole(role) {
   const localized = LOCALIZED_ROLES[role];
@@ -23,16 +27,36 @@ function normalizeRole(role) {
     .replace(/^webarea$/i, 'web area').replace(/^text entry area$/i, 'text area').toLowerCase();
 }
 
+function keyRequiresCodex(key, options) {
+  if (typeof key !== 'string') return true;
+  const tokens = key.split('+').map(token => token.trim().toLowerCase());
+  if (tokens.some(token => !token || /^(?:return|enter|kp_enter|numpad_enter|delete|del|kp_delete|numpad_delete|backspace|back_space|bs)$/.test(token))) return true;
+  return options.kind === 'app' && options.platform === 'windows'
+    && tokens.some(token => /^(?:win|windows|super|meta|cmd|command|os)(?:_[lr])?$/.test(token));
+}
+
+function isPoint(point) {
+  if (Array.isArray(point)) return point.length === 2 && point.every(Number.isFinite);
+  if (!point || typeof point !== 'object' || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+      || !['screenshot', 'window', 'screen', 'image'].includes(point.space)) return false;
+  if (point.screenshotId !== undefined && (typeof point.screenshotId !== 'string' || !point.screenshotId)) return false;
+  if (['screenshot', 'image'].includes(point.space) && !point.screenshotId) return false;
+  if (point.space === 'image' && (!Number.isFinite(point.imageWidth) || point.imageWidth <= 0
+      || !Number.isFinite(point.imageHeight) || point.imageHeight <= 0)) return false;
+  return ['imageWidth', 'imageHeight'].every(name => point[name] === undefined || (Number.isFinite(point[name]) && point[name] > 0));
+}
+
 function cleanLabel(details) {
   const text = details.replace(/^\([^)]*\)\s*/, '').replace(/^(?:Description|Title|Label):\s*/i, '');
   if (/^(?:Value|ID|URL):/i.test(text)) return '';
-  return text.split(/,\s*(?:Value|URL|Help|Description|Title|Placeholder|ID|Enabled|Checked|Selected|Secondary Actions):|\s+\[(?:checked|unchecked|selected|disabled)\]/i)[0].trim();
+  return text.split(/(?:,\s*|\s+)(?:Value|URL|Help|Description|Title|Placeholder|ID|Enabled|Checked|Selected|Secondary Actions):|\s+\[(?:checked|unchecked|selected|disabled)\]/i)[0].trim();
 }
 
 export function parseAX(raw) {
   if (typeof raw !== 'string') throw new Error('AX_NOT_TEXT');
   const nodes = [];
   const seen = new Map();
+  const seenText = new Map();
   const topUrl = raw.match(/^Browser tab:.* URL: "([^"]+)"\./m)?.[1];
   let topOrigin;
   try { topOrigin = new URL(topUrl).origin; } catch { /* Native app trees have no browser URL. */ }
@@ -43,12 +67,13 @@ export function parseAX(raw) {
     const indent = (line.match(/^\s*/)?.[0] ?? '').replace(/\t/g, '    ').length;
     while (frames.length && frames.at(-1).indent >= indent) frames.pop();
     const id = Number(match[1] ?? match[2]);
-    if (seen.has(id)) { seen.get(id).duplicate = true; continue; }
-    const details = (match[4] ?? '').replace(/^\([^)]*\)\s*/, '');
+    const rawDetails = match[4] ?? '';
+    const flags = new Set((rawDetails.match(/^\(([^)]*)\)/)?.[1] ?? '').split(',').map(value => value.trim().toLowerCase()));
+    const details = rawDetails.replace(/^\([^)]*\)\s*/, '');
     const role = normalizeRole(match[3]);
     let frameOrigin = frames.at(-1)?.origin ?? topOrigin;
     if (role === 'web area') {
-      const frameUrl = details.match(/(?:^|,\s*)URL:\s*([^,\s]+)/i)?.[1];
+      const frameUrl = details.match(/(?:^|,\s*|\s+)URL:\s*([^,\s]+)/i)?.[1];
       if (frames.length === 0 && topOrigin) {
         frameOrigin = topOrigin;
       } else if (frameUrl) {
@@ -61,18 +86,24 @@ export function parseAX(raw) {
       }
       frames.push({indent, origin: frameOrigin});
     }
-    const value = details.match(/(?:^|,\s*)Value:\s*(.*?)(?=,\s*(?:URL|Help|Description|Title|ID|Enabled|Checked|Selected):|$)/i)?.[1]?.trim() ?? '';
-    const identity = details.match(/(?:^|,\s*)ID:\s*([^,]+)/i)?.[1]?.trim() ?? '';
+    const value = details.match(/(?:^|,\s*|\s+)Value:\s*(.*?)(?=(?:,\s*|\s+)(?:URL|Help|Description|Title|ID|Enabled|Checked|Selected|Secondary Actions):|$)/i)?.[1]?.trim() ?? '';
+    const identity = details.match(/(?:^|,\s*|\s+)ID:\s*(.*?)(?=(?:,\s*|\s+)(?:Value|URL|Help|Description|Title|Enabled|Checked|Selected|Secondary Actions):|$)/i)?.[1]?.trim() ?? '';
     const label = cleanLabel(details) || (EDITABLE.test(role) ? identity : '') || '';
     const node = {
       id, role, label, value, identity, frameOrigin,
-      disabled: /\bdisabled\b|Enabled:\s*(?:false|0)/i.test(details),
-      checked: /\[checked\]|Checked:\s*(?:true|1)/i.test(details) || (/checkbox/i.test(role) && value === '1'),
-      selected: /\[selected\]|Selected:\s*(?:true|1)/i.test(details),
+      disabled: flags.has('disabled') || /\bdisabled\b|Enabled:\s*(?:false|0)/i.test(details),
+      checked: flags.has('checked') || /\[checked\]|Checked:\s*(?:true|1)/i.test(details) || (/checkbox/i.test(role) && value === '1'),
+      selected: flags.has('selected') || /\[selected\]|Selected:\s*(?:true|1)/i.test(details),
       duplicate: false,
     };
+    if (seen.has(id)) {
+      const previous = seen.get(id);
+      if (seenText.get(id) !== line.trim() || previous.frameOrigin !== frameOrigin) previous.duplicate = true;
+      continue;
+    }
     nodes.push(node);
     seen.set(id, node);
+    seenText.set(id, line.trim());
   }
   return nodes;
 }
@@ -116,7 +147,9 @@ function compileOptions(input) {
   const textSlots = compileList(input.textSlots, slot => {
     if (!slot || typeof slot.name !== 'string' || !slot.name || typeof slot.value !== 'string' || slot.value.length > 10000
         || SENSITIVE.test(slot.name)) throw new Error('INVALID_TEXT_SLOT');
-    return Object.freeze({...slot, fieldLabel: compileRule(slot.fieldLabel)});
+    const fieldRole = slot.fieldRole === undefined ? undefined : typeof slot.fieldRole === 'string' ? normalizeRole(slot.fieldRole) : '';
+    if (fieldRole !== undefined && !EDITABLE.test(fieldRole)) throw new Error('INVALID_TEXT_SLOT');
+    return Object.freeze({...slot, fieldLabel: compileRule(slot.fieldLabel), fieldRole});
   }, 'TEXT_SLOTS');
   const scrollRegions = compileList(input.scrollRegions, region => {
     if (!region || typeof region.name !== 'string' || !region.name) throw new Error('INVALID_SCROLL_REGION');
@@ -125,13 +158,14 @@ function compileOptions(input) {
       throw new Error('INVALID_SCROLL_DIRECTION');
     }
     const point = region.point;
-    if (point !== undefined && (!Array.isArray(point) || point.length !== 2 || !point.every(Number.isFinite))) {
+    if (point !== undefined && !isPoint(point)) {
       throw new Error('INVALID_SCROLL_POINT');
     }
-    return Object.freeze({...region, label: region.label === undefined ? undefined : compileRule(region.label), directions: Object.freeze([...directions]), point: point && Object.freeze([...point])});
+    return Object.freeze({...region, label: region.label === undefined ? undefined : compileRule(region.label), directions: Object.freeze([...directions]),
+      point: point && Object.freeze(Array.isArray(point) ? [...point] : {...point})});
   }, 'SCROLL_REGIONS');
   const keys = compileList(input.keys, key => {
-    if (!key || typeof key.key !== 'string' || !key.key || FORBIDDEN_KEY.test(key.key) || typeof key.description !== 'string') {
+    if (!key || keyRequiresCodex(key.key, {kind: input.kind, platform}) || typeof key.description !== 'string') {
       throw new Error('KEY_REQUIRES_CODEX');
     }
     return Object.freeze({...key});
@@ -153,9 +187,11 @@ function compileOptions(input) {
   if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 100 || !Number.isFinite(maxTotalMs)
       || maxTotalMs < 1 || maxTotalMs > 600000 || !Number.isFinite(minConfidence)
       || minConfidence < 0.55 || minConfidence > 1) throw new Error('INVALID_BUDGET');
-  return Object.freeze({...input, platform, clickLabels, textSlots, scrollRegions, keys, observations,
+  const options = Object.freeze({...input, platform, clickLabels, textSlots, scrollRegions, keys, observations,
     allowedOrigins: Object.freeze([...(input.allowedOrigins ?? [])]),
     allowedFrameOrigins: Object.freeze([...(input.allowedFrameOrigins ?? [])]), maxSteps, maxTotalMs, minConfidence});
+  compiledOptions.add(options);
+  return options;
 }
 
 function checkOrigin(raw, options) {
@@ -176,7 +212,7 @@ function readObservations(raw, options) {
 }
 
 export function buildCandidates(raw, inputOptions) {
-  const options = inputOptions.clickLabels ? inputOptions : compileOptions(inputOptions);
+  const options = compiledOptions.has(inputOptions) ? inputOptions : compileOptions(inputOptions);
   const nodes = parseAX(raw);
   const candidates = [];
   const deferred = [];
@@ -194,7 +230,7 @@ export function buildCandidates(raw, inputOptions) {
     if (EDITABLE.test(node.role)) {
       for (let slot = 0; slot < options.textSlots.length; slot++) {
         const textSlot = options.textSlots[slot];
-        if (testRule(textSlot.fieldLabel, node.label) && node.value !== textSlot.value) {
+        if ((!textSlot.fieldRole || textSlot.fieldRole === node.role) && testRule(textSlot.fieldLabel, node.label) && node.value !== textSlot.value) {
           const action = {kind: 'fill', target: node.id, label: node.label, slot,
             slotName: textSlot.name, description: `Fill ${redact(node.label)} from prepared slot ${redact(textSlot.name)}`};
           if (sensitiveNode) action.reviewReason = 'Sensitive field reserved for Codex.';
@@ -257,6 +293,7 @@ async function execute(action, options) {
   if (action.kind === 'fill') {
     const value = options.textSlots[action.slot].value;
     if (options.kind === 'tab') return target.setValue(action.target, value);
+    if (typeof target.replaceText === 'function') return target.replaceText(action.target, value);
     await target.click(action.target);
     await target.pressKey(options.platform === 'mac' ? 'cmd+a' : 'ctrl+a');
     return target.typeText(value);
@@ -266,7 +303,7 @@ async function execute(action, options) {
   }
   if (action.kind === 'scroll') {
     if (options.kind === 'app' && options.platform === 'windows') {
-      if (!Array.isArray(action.target)) throw new Error('WINDOWS_SCROLL_REQUIRES_POINT');
+      if (!isPoint(action.target)) throw new Error('WINDOWS_SCROLL_REQUIRES_POINT');
       await target.getScreenshot();
       return target.scroll(action.target, action.direction, {pixels: action.pixels});
     }
@@ -324,6 +361,7 @@ export function createSession(input) {
   }
   async function observe() {
     const raw = await measured('observeMs', () => options.target.getAXState({emit: false, disableDiffing: true}));
+    if (typeof raw !== 'string') throw new Error('AX_NOT_TEXT');
     checkOrigin(raw, options);
     latestRaw = raw;
     return raw;
@@ -333,6 +371,15 @@ export function createSession(input) {
   }
   async function inScope(raw) {
     return typeof options.scopeCheck !== 'function' || Boolean(await options.scopeCheck(raw));
+  }
+  async function inspect() {
+    try {
+      const raw = await observe();
+      return await inScope(raw) ? {raw} : {raw, status: 'scope_changed'};
+    } catch (error) {
+      if (error?.message === 'BROWSER_LEFT_ALLOWED_ORIGINS') return {status: 'scope_changed'};
+      return {status: 'needs_inspection', reason: 'The target state could not be read or validated; inspect fresh state before continuing.'};
+    }
   }
   function budgetStatus(chunkStartedAt, maxMs, maxActions, chunkActions) {
     if (!active) return 'cancelled';
@@ -348,7 +395,15 @@ export function createSession(input) {
       return {error: result('needs_inspection', {reason: 'A UI operation may have partially completed; inspect fresh state before continuing.'})};
     }
     mutations++;
-    const after = await observe();
+    const observed = await inspect();
+    if (observed.status) {
+      trace.push({action: action.description, executed: true,
+        ...(observed.raw === undefined ? {} : {changed: observed.raw !== before}),
+        reason: observed.status === 'scope_changed' ? 'scope_changed' : 'observation_error'});
+      return {error: result(observed.status, {reason: observed.reason
+        ?? 'The target scope changed after the UI operation; inspect fresh state before continuing.'})};
+    }
+    const after = observed.raw;
     const changed = after !== before;
     trace.push({action: action.description, executed: true, changed});
     return {raw: after, changed};
@@ -363,13 +418,15 @@ export function createSession(input) {
     const chunkStartedAt = performance.now();
     let chunkActions = 0;
     try {
-      let raw = await observe();
+      const initial = await inspect();
+      if (initial.status) return result(initial.status, {reason: initial.reason});
+      let raw = initial.raw;
       if (await verify(raw)) { active = false; return result('done', {verified: true}); }
       for (const step of plan) {
         const limit = budgetStatus(chunkStartedAt, maxMs, maxActions, chunkActions);
         if (limit) return result(limit);
         if (!await inScope(raw)) return result('scope_changed');
-        if ((step.label && (CONSEQUENTIAL.test(step.label) || FILE_PICKER.test(step.label))) || (step.key && FORBIDDEN_KEY.test(step.key))) {
+        if ((step.label && (CONSEQUENTIAL.test(step.label) || FILE_PICKER.test(step.label))) || (step.key && keyRequiresCodex(step.key, options))) {
           return result('needs_codex_review', {reason: 'The next requested control is consequential.'});
         }
         const built = buildCandidates(raw, options);
@@ -400,12 +457,14 @@ export function createSession(input) {
     let chunkActions = 0;
     let waitCount = 0;
     try {
-      let raw = await observe();
+      const initial = await inspect();
+      if (initial.status) return result(initial.status, {reason: initial.reason});
+      let raw = initial.raw;
       while (active) {
+        if (!await inScope(raw)) return result('scope_changed');
         if (await verify(raw)) { active = false; return result('done', {verified: true}); }
         const limit = budgetStatus(chunkStartedAt, maxMs, maxActions, chunkActions);
         if (limit) return result(limit);
-        if (!await inScope(raw)) return result('scope_changed');
         const built = buildCandidates(raw, options);
         if (!built.candidates.length) return result(built.deferred.length ? 'needs_codex_review' : 'needs_codex',
           {reason: built.deferred.length ? 'Only consequential controls are available.' : 'No permitted action is available.'});
@@ -422,7 +481,9 @@ export function createSession(input) {
         let choice;
         try { choice = validateChoice(response.answers?.next, criteria); }
         catch { return result('needs_codex', {reason: 'Decision provider returned an invalid choice.'}); }
-        const fresh = await observe();
+        const refreshed = await inspect();
+        if (refreshed.status) return result(refreshed.status, {reason: refreshed.reason});
+        const fresh = refreshed.raw;
         const freshBuilt = buildCandidates(fresh, options);
         if (snapshot(fresh, options, freshBuilt) !== before) {
           staleStates++;

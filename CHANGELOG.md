@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 — 2026-10-05
+
+- Add the native Windows Sky window2 adapter for returned window state, original
+  element numbers, selected screenshot-region coordinates, and keysym chords.
+- Require fresh observations for input, reject stale screenshot/image points,
+  preserve exact window bindings through defensive copies, and hand off unknown
+  outcomes without automatic replay. Prepared native fields use one `set_value`.
+- Support additional Chinese accessibility roles, native metadata without commas,
+  identical repeated menu references, and an optional prepared-field role.
+- Make provider and bridge-client imports compatible with REPLs without global
+  `process`; document explicit bridge descriptor paths while keeping credentials
+  and provider setup in the terminal.
+- Record ten live TypeSafe responses identifying `jev-1.13.0` during Multisim and
+  Jianying Pro acceptance. Jev ran the modified Multisim sample and played the
+  video; ordinary Codex/Sky handled file selection, resistor editing after failed
+  indexed actions, media import, timeline placement, and local export. This does
+  not establish fully autonomous operation or arbitrary application support.
+- Preserve the existing synthetic browser demo, screenshot normalization,
+  installer safeguards, privacy boundaries, and public release checks.
+
 ## 0.2.2 — 2026-10-05
 
 - Add a synthetic loopback demo with 12 sections, no login or Jev API key.

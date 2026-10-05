@@ -76,7 +76,7 @@ npm run demo -- --port=4319
 
 ## 5. 用于自己的任务
 
-先选范围明确的只读导航任务，确认确切标签页/窗口、当前可见控件标签、浏览器来源和可观察的成功条件。Codex 据此建立[技能文档](../skills/reinforced-computer-use/SKILL.md)中的会话。导入运行时前，按 CUA 文档完成单次初始化，并保留选中的目标。
+先选范围明确的只读导航任务，确认确切标签页/窗口、当前可见控件标签、浏览器来源和可观察的成功条件。Codex 据此建立[技能文档](../skills/reinforced-computer-use/SKILL.md)中的会话。Windows 原生应用先在 `node_repl` 中初始化文档规定的 `@oai/sky` 客户端，从实际窗口清单选择确切的 `Window`，再通过 [Sky 适配器](../skills/reinforced-computer-use/references/sky-adapter.md)绑定。浏览器及旧 CUA 目标按 CUA 文档完成单次初始化。保留选中的目标。
 
 浏览器会话必须设置确切的 `allowedOrigins`；跨源 iframe 还必须列出确切的 `allowedFrameOrigins`。Windows 原生滚动需要根据新截图选择坐标。不要把密码、验证码、API Key 或支付信息放入文本槽。没有可访问性标签的控件、视觉判断、文件选择器和重要的最终提交步骤，使用普通 Computer Use。
 
@@ -84,7 +84,7 @@ npm run demo -- --port=4319
 
 ## 可选：Jev 配置
 
-本地计划和演示可跳过本节。自适应模式调用云端提供商，本仓库不在本机加载 Jev 模型，也没有验证当前服务可用性、计费、账户权限或真实提供商端到端调用。
+本地计划和演示可跳过本节。自适应模式调用云端提供商，本仓库不在本机加载 Jev 模型。[本次 TypeSafe 实机验收](acceptance-native-2026-10-05.md)已执行真实 Jev 决策，并在需要时交回 Codex/Sky。这不保证持续的服务可用性、计费规则或其他账户的访问权限。
 
 先读[隐私与数据流](PRIVACY.md)。规划目标、目标名称、允许标签、槽名称、观察项名称和近期动作描述可能含私人信息。默认规划 JSON 排除准备文本值与截图，但标签可能已经含有相同内容，目标网站也可能发送填入的文本。
 
@@ -117,7 +117,7 @@ node "$pluginRoot\scripts\bridge-server.mjs" --idle-ms=300000
 
 桥接监听随机回环端口，使用临时桥接令牌。提供商通过 HTTPS 认证头接收真实 API Key。结束后按 Ctrl+C 停止桥接；默认空闲超时为五分钟。临时描述文件可能含认证信息，不应上传。
 
-Codex 会话中的自适应执行还需要 `shareWithPlanner: true`、限定范围的 `plannerGoal`、桥接客户端，以及与本地计划相同的控件、范围和验证限制。详见[Jev 参考](../skills/reinforced-computer-use/references/jev-setup.md)，不要仅为强行推进而降低置信度要求或改换提供商。
+Codex 会话中的自适应执行还需要 `shareWithPlanner: true`、限定范围的 `plannerGoal`、桥接客户端，以及与本地计划相同的控件、范围和验证限制。在 `node_repl` 中显式传入本机终端诊断得到的 `descriptorPath`，避免全局 `process` 不可用时的默认路径偏差。详见[Jev 参考](../skills/reinforced-computer-use/references/jev-setup.md)，不要仅为强行推进而降低置信度要求或改换提供商。
 
 ## 遇到问题
 

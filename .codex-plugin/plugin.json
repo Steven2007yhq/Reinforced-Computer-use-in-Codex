@@ -1,7 +1,7 @@
 {
   "name": "reinforced-computer-use",
-  "version": "0.2.2",
-  "description": "Windows-first bounded Computer Use loops with a local deterministic fast path, optional Jev decisions, safety handoffs, and independent verification.",
+  "version": "0.3.0",
+  "description": "Windows-first bounded Computer Use loops with a Sky window2 adapter, verified screenshot coordinates, local deterministic plans, optional Jev decisions, and safety handoffs.",
   "author": {
     "name": "Steven2007yhq"
   },

@@ -76,7 +76,7 @@ The expected outcome is a saved image whose sections appear once in order, with 
 
 ## 5. Apply it to your own task
 
-Start with a narrow read-only navigation task. Identify the exact tab/window, currently visible labels, browser origins, and an observable success condition. Codex then creates the session described in [the skill](../skills/reinforced-computer-use/SKILL.md). Use the documented CUA initialization call before importing the runtime, and retain the selected target.
+Start with a narrow read-only navigation task. Identify the exact tab/window, currently visible labels, browser origins, and an observable success condition. Codex then creates the session described in [the skill](../skills/reinforced-computer-use/SKILL.md). For Windows native apps, initialize the documented `@oai/sky` client in `node_repl`, select an exact returned `Window`, and bind it through [the Sky adapter](../skills/reinforced-computer-use/references/sky-adapter.md). Browser and legacy CUA targets use the documented CUA initialization call. Retain the selected target.
 
 Browser sessions require exact `allowedOrigins`; cross-origin frames also require exact `allowedFrameOrigins`. Native Windows scrolling needs coordinates chosen from a fresh screenshot. Do not put passwords, one-time codes, API keys, or payment data into text slots. Use ordinary Computer Use for inaccessible controls, visual judgment, file pickers, and consequential final steps.
 
@@ -84,7 +84,7 @@ If the runtime hands control back, inspect the current interface and reason befo
 
 ## Optional Jev setup
 
-Skip this section for local plans and the demo. Adaptive mode calls a cloud provider; this repository does not load a Jev model locally or verify current provider availability, billing, account access, or a real provider end-to-end call.
+Skip this section for local plans and the demo. Adaptive mode calls a cloud provider; this repository does not load a Jev model locally. A scoped [TypeSafe live acceptance](acceptance-native-2026-10-05.md) exercised Jev decisions with Codex/Sky handoffs. It does not establish continuing provider availability, billing, or access for other accounts.
 
 Review [privacy and data flow](PRIVACY.md) first (Chinese). The planning goal, target name, allowed labels, slot/observation names, and recent action descriptions may disclose private information. Prepared text values and screenshots are excluded from the default planning JSON; labels can still contain the same information, and target websites can transmit text you enter.
 
@@ -117,7 +117,7 @@ node "$pluginRoot\scripts\bridge-server.mjs" --idle-ms=300000
 
 The bridge listens on a random loopback port and uses a temporary bridge token. The provider receives your real API key through the HTTPS authorization header. Stop the bridge with Ctrl+C when finished; the default idle timeout is five minutes. The temporary descriptor can contain sensitive authentication material and must not be uploaded.
 
-In the Codex session, adaptive execution requires `shareWithPlanner: true`, a deliberately scoped `plannerGoal`, the bridge client, and the same local controls/scope/verifier restrictions as a plan. Follow [the detailed Jev reference](../skills/reinforced-computer-use/references/jev-setup.md). Do not lower confidence limits or change providers merely to force progress.
+In the Codex session, adaptive execution requires `shareWithPlanner: true`, a deliberately scoped `plannerGoal`, the bridge client, and the same local controls/scope/verifier restrictions as a plan. In `node_repl`, pass an explicit `descriptorPath` obtained from this machine's terminal diagnostics; do not rely on an environment-derived default when global `process` is unavailable. Follow [the detailed Jev reference](../skills/reinforced-computer-use/references/jev-setup.md). Do not lower confidence limits or change providers merely to force progress.
 
 ## If something fails
 

@@ -4,7 +4,7 @@
 
 **A Windows-first Codex plugin for multi-step UI workflows and long-page capture, with optional Jev planning.** Follow a scoped local plan, observe the interface again before each action, and check the result locally. The default mode needs **no API key**.
 
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/Steven2007yhq/Reinforced-Computer-use-in-Codex/releases/tag/v0.2.2)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](package.json)
 [![CI](https://github.com/Steven2007yhq/Reinforced-Computer-use-in-Codex/actions/workflows/ci.yml/badge.svg)](https://github.com/Steven2007yhq/Reinforced-Computer-use-in-Codex/actions)
 [![Node](https://img.shields.io/badge/Node.js-22%2B-43853d)](package.json)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -20,6 +20,7 @@
 | Feature | Example | Requirements |
 | --- | --- | --- |
 | **Scoped local workflows** | Open a known sequence of pages using observed control labels, then verify the destination | An enabled Computer Use surface; no Jev account or API key |
+| **Sky native Windows adapter** | Bind an exact returned window and convert its state, element numbers, screenshot coordinates, and keyboard chords | The existing `@oai/sky` window2 service in `node_repl`; indexed workflows need usable accessibility text |
 | **Long-page capture** | Scroll a selected browser tab, stitch viewport captures, and check the first and last sections | A browser surface with screenshot, scroll, keyboard, and read-only page-metric APIs |
 | **Optional Jev planning** | Choose the next action from a restricted set when the UI can branch | Provider configuration, a valid key, a local bridge, and explicit sharing of planning metadata |
 
@@ -31,11 +32,11 @@ Codex supplies the goal, permission, prepared text, visual judgment, and final i
 
 The verified development environment is **Windows 11 x64 with Node.js 24.14.0**; the source requires **Node.js 22 or later**. You also need Git, npm, PowerShell, and a Codex installation that supports local plugin marketplaces and `codex plugin add`.
 
-**Computer Use must already be available in your Codex chat. Installing this plugin does not enable it.** Browser workflows require an enabled browser surface. Native Windows applications additionally require an enabled native CUA surface that can bind the exact window.
+**Computer Use must already be available in your Codex chat. Installing this plugin does not enable it.** Browser workflows require an enabled browser surface. The new native Windows path uses the documented `@oai/sky` window2 client in `node_repl` and binds one exact returned `Window`. Existing native CUA app targets remain supported when that surface is available.
 
 | Device / platform | Current status |
 | --- | --- |
-| Windows 11 x64 desktop or laptop | Primary development platform; UI support depends on the available CUA surface |
+| Windows 11 x64 desktop or laptop | Primary development platform; UI support depends on the available browser or native Computer Use surface |
 | Windows 10, Windows ARM64, macOS, Linux | Deployment and native UI operation are unverified |
 | Android / iOS phones and tablets | Unsupported deployment targets |
 
@@ -76,11 +77,15 @@ Use **`runPlan()`** for a workflow whose permitted steps are already known. Use 
 
 Sessions bind an exact tab or window, allow observed labels, restrict browser origins, define a local `verify()` predicate, and set step/time budgets. A `done` result means that predicate passed; inspect the final state or screenshot before reporting success. If scope changes or an action is uncertain, inspect fresh state instead of replaying it. The full session API and bootstrap examples are in the [Codex skill](skills/reinforced-computer-use/SKILL.md).
 
+For native Windows apps, first read the installed Computer Use skill, initialize `sky` with `await import('@oai/sky')` in `node_repl`, and inspect `sky.list_windows()` or `sky.list_apps()`. Select exactly one returned window, then create the target with `createSkyTarget({sky, window: selectedWindow})` from `scripts/sky-adapter.mjs`. Observe its accessibility tree before allowing actions. The adapter preserves native element numbers, replaces prepared fields with one `set_value` call, retains selected screenshot-region coordinates, and converts keyboard chords to Sky keysyms. See [the native adapter reference](skills/reinforced-computer-use/references/sky-adapter.md).
+
+Screenshot/image inputs require the current observation generation; physical screen inputs require an explicitly known scale. Missing accessibility, changed bindings, uncertain input, or failed verification hands the workflow back for inspection. These checks do not guarantee arbitrary application compatibility. Version 0.3.0 also supports importing the provider and bridge client in a REPL without global `process`; pass the bridge descriptor path observed in the terminal, and keep credential handling in that terminal.
+
 ## Optional: connect Jev
 
 Local mode and the demo work without Jev. Adaptive mode needs TypeSafe or OpenRouter configuration, the relevant user environment variable, a retained loopback bridge process, and `shareWithPlanner: true` with a scoped `plannerGoal`. Follow [the setup instructions](docs/GETTING_STARTED.md#optional-jev-setup) or the [detailed Jev reference](skills/reinforced-computer-use/references/jev-setup.md).
 
-Planning requests can disclose the target name, goal, allowed control labels, observation names, prepared slot names, and recent action descriptions. Prepared text values and screenshots are excluded from the default planning JSON, but entered text can still be sent by the target application or website. Your API key is sent to your selected provider in its HTTPS authorization header. The repository does not verify current provider availability, account access, billing, or a live Jev end-to-end call. Read [privacy and data flow](docs/PRIVACY.md) before enabling sharing (Chinese).
+Planning requests can disclose the target name, goal, allowed control labels, observation names, prepared slot names, and recent action descriptions. Prepared text values and screenshots are excluded from the default planning JSON, but entered text can still be sent by the target application or website. Your API key is sent to your selected provider in its HTTPS authorization header. A [2026-10-05 native acceptance](docs/acceptance-native-2026-10-05.md) recorded ten real TypeSafe responses identifying `jev-1.13.0`, including permitted decisions in Multisim and Jianying Pro. Those workflows also required ordinary Codex/Sky handoffs for file selection, editing, media import, timeline placement, and export; they do not establish full autonomous operation. This record does not guarantee current provider availability, other accounts, billing, OpenRouter access, or other applications. Read [privacy and data flow](docs/PRIVACY.md) before enabling sharing (Chinese).
 
 ## Development and evidence
 
@@ -90,7 +95,7 @@ npm test
 npm run check:release
 ```
 
-The runtime and screenshot helpers are in `scripts/`; the Codex skill is in `skills/reinforced-computer-use/`; tests are in `tests/`. [Verification records](docs/VERIFICATION.md) distinguish mock tests, the local browser demo, historical acceptance, and unverified production/native/provider paths. CI runs mock tests on Windows/Ubuntu and Node 22/24; passing Ubuntu CI does not prove Linux desktop compatibility.
+The runtime and screenshot helpers are in `scripts/`; the Codex skill is in `skills/reinforced-computer-use/`; tests are in `tests/`. [Verification records](docs/VERIFICATION.md) distinguish mock tests, the local browser demo, tested native/provider actions with Codex handoffs, historical acceptance, and unverified production paths. CI runs mock tests on Windows/Ubuntu and Node 22/24; passing Ubuntu CI does not prove Linux desktop compatibility.
 
 If you try the demo, an issue stating your OS, Node version, available CUA surface, reproduction steps, and expected versus observed result is useful. Remove private labels, credentials, local paths, screenshots, bridge descriptors, and traces before sharing. Follow [troubleshooting](docs/TROUBLESHOOTING.md) and [the security reporting policy](SECURITY.md).
 

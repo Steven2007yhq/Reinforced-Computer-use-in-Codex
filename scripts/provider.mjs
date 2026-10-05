@@ -1,6 +1,8 @@
 import {mkdir, readFile, stat, writeFile, chmod} from 'node:fs/promises';
-import {homedir} from 'node:os';
+import {homedir, platform as osPlatform} from 'node:os';
 import {dirname, join} from 'node:path';
+
+const defaultEnvironment = () => typeof process === 'undefined' ? {} : process.env;
 
 export const providers = Object.freeze({
   typesafe: Object.freeze({
@@ -17,16 +19,16 @@ export const providers = Object.freeze({
   }),
 });
 
-export function configDirectory(env = process.env, platform = process.platform) {
+export function configDirectory(env = defaultEnvironment(), platform = osPlatform()) {
   if (platform === 'win32' && env.APPDATA) return join(env.APPDATA, 'ReinforcedComputerUse');
   return join(homedir(), '.config', 'reinforced-computer-use');
 }
 
-export function configPath(env = process.env, platform = process.platform) {
+export function configPath(env = defaultEnvironment(), platform = osPlatform()) {
   return join(configDirectory(env, platform), 'config.json');
 }
 
-export function bridgeDescriptorPath(env = process.env, platform = process.platform) {
+export function bridgeDescriptorPath(env = defaultEnvironment(), platform = osPlatform()) {
   return join(configDirectory(env, platform), 'bridge.json');
 }
 
@@ -57,20 +59,20 @@ export async function saveConfig(value, path = configPath()) {
   const config = validateConfig(value);
   await mkdir(dirname(path), {recursive: true, mode: 0o700});
   await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, {mode: 0o600});
-  if (process.platform !== 'win32') {
+  if (osPlatform() !== 'win32') {
     await chmod(dirname(path), 0o700);
     await chmod(path, 0o600);
   }
   return {path, ...config};
 }
 
-export function credentialStatus(config, env = process.env) {
+export function credentialStatus(config, env = defaultEnvironment()) {
   const route = providers[config.provider];
   const key = env[route.keyName];
   return {keyName: route.keyName, present: typeof key === 'string' && key.length >= 12};
 }
 
-export function readCredential(config, env = process.env) {
+export function readCredential(config, env = defaultEnvironment()) {
   const route = providers[config.provider];
   const key = env[route.keyName];
   if (typeof key !== 'string' || key.length < 12) throw new Error(`${route.keyName}_MISSING`);
@@ -93,7 +95,7 @@ export function validateChoice(answer, criteria) {
   return answer;
 }
 
-export function createProviderClient(config, {fetchImpl = globalThis.fetch, env = process.env} = {}) {
+export function createProviderClient(config, {fetchImpl = globalThis.fetch, env = defaultEnvironment()} = {}) {
   const normalized = validateConfig(config);
   const route = providers[normalized.provider];
   const key = readCredential(normalized, env);
@@ -133,10 +135,10 @@ export function createProviderClient(config, {fetchImpl = globalThis.fetch, env 
   };
 }
 
-export async function inspectConfig(path = configPath(), env = process.env) {
+export async function inspectConfig(path = configPath(), env = defaultEnvironment()) {
   const config = await loadConfig(path);
   let permissions = 'not_enforced_on_windows';
-  if (process.platform !== 'win32') {
+  if (osPlatform() !== 'win32') {
     const info = await stat(path);
     permissions = (info.mode & 0o077) === 0 ? 'private' : 'too_open';
   }

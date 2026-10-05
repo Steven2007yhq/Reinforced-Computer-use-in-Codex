@@ -25,7 +25,9 @@
 | 现象 / 状态 | 含义与下一步 |
 | --- | --- |
 | 没有 Computer Use 工具 | 当前聊天无法执行界面任务，插件不能启用 CUA；检查 Codex 配置与实际提供的工具。 |
-| 浏览器可用，但不能绑定原生应用 | 浏览器和原生接口分别提供。原生操作需要原生 CUA 及确切可访问窗口，进程运行不能证明接口可用。 |
+| 浏览器可用，但不能绑定原生应用 | 浏览器和原生接口分别提供。Windows 应检查文档规定的 `@oai/sky` 实际窗口清单，选择确切的 `Window` 并通过 [Sky 适配器](../skills/reinforced-computer-use/references/sky-adapter.md)绑定；也可使用已提供的旧原生 CUA 目标。进程运行不能证明接口可用。 |
+| `SKY_ACCESSIBILITY_UNAVAILABLE` | 原生服务没有返回 AX，批次在输入前停止。改用新截图下的普通 Computer Use，不要虚构编号控件。 |
+| 终端桥接已启动，REPL 仍报 `BRIDGE_NOT_RUNNING` | REPL 可能没有全局 `process`，默认描述文件路径因此不同。显式传入由本机终端 `configPath` 得到的 `descriptorPath`，见 [Jev 配置](../skills/reinforced-computer-use/references/jev-setup.md)。 |
 | 首次 CUA 调用不接受导入插件 | 首次调用只执行一个文档规定的入口，读完返回文档后再导入运行时，见[技能说明](../skills/reinforced-computer-use/SKILL.md)。 |
 | 控件标签缺失或重复 | 用普通 Computer Use 查看新状态。使用已观察到的确切标签与窄范围限制，不要仅为匹配而扩大正则。 |
 | `needs_codex_review` / `needs_codex` | 检查当前状态并交还 Codex。控件可能敏感、frame 来源未授权或界面需要直接观察，遵循当前 CUA 权限策略。 |

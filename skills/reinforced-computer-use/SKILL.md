@@ -15,20 +15,37 @@ Resolve `PLUGIN_ROOT` as two directories above this skill directory. Always impo
 - Use `runAdaptive()` only when several screens can branch and the next safe control must be selected from current UI state. It requires an explicitly configured Jev provider and `shareWithPlanner: true`.
 - Use ordinary Computer Use for one-off actions, graphical judgment, canvas, drag-and-drop, file pickers, inaccessible controls, and any consequential final step.
 
-This build is Windows-first. Browser tabs are also supported. For Windows apps, bind an exact open window ID from `cua.listWindows()` or an app inventory entry; never select the first matching window by assumption. Text replacement is performed locally as focus → Ctrl+A → type. Native Windows scrolling requires a caller-supplied coordinate and a fresh screenshot; the runtime does not invent coordinates.
+This build is Windows-first. Browser tabs are also supported. For Windows apps, use the Sky adapter with an exact returned `Window` from `sky.list_windows()` or `sky.list_apps()`; never select the first matching window by assumption. Sky text replacement uses one indexed `set_value` call. Native Windows scrolling requires a caller-supplied coordinate and a fresh screenshot; the runtime does not invent coordinates. Legacy CUA app targets remain supported with focus → Ctrl+A → type.
 
-## Bootstrap Computer Use correctly
+## Bootstrap Windows Computer Use with Sky
+
+Read the installed Computer Use skill and its guidance/API/confirmation documents. Initialize `@oai/sky` in `node_repl`, then select exactly one returned window. Use the existing Computer Use service; this plugin does not install or launch a helper.
+
+```js
+if (!globalThis.sky) {
+  const {sky} = await import('@oai/sky');
+  globalThis.sky = sky;
+}
+globalThis.windows = await sky.list_windows();
+nodeRepl.write(JSON.stringify(windows, null, 2));
+```
+
+Inspect the inventory, bind the exact returned window, import `scripts/sky-adapter.mjs`, and observe its tree before preparing an action. See [Sky adapter](references/sky-adapter.md) for binding, coordinates, shortcuts, and recovery.
+
+`getAXState()` explicitly fails with `SKY_ACCESSIBILITY_UNAVAILABLE` when the native service returns no accessibility tree. The batch runtime hands control back without input. Use ordinary screenshot-grounded Computer Use for that app; never fabricate indexed controls from pixels or document text.
+
+## Bootstrap browser and legacy CUA targets
 
 The first `mcp__cua_repl.js` call must contain exactly one documented entry call such as `cua.getState()`, `cua.getApp({windowId})`, `cua.getTab(...)`, or `cua.createBrowserTab(...)`. Read the returned documentation before importing this plugin. Keep the returned app or tab binding for the whole session.
 
-Do not infer that the plugin provides Computer Use itself. If the direct CUA tool is absent, report that exact limitation. Do not substitute OS event injection, private endpoints, Playwright/CDP drivers, or a new browser profile.
+Do not infer that the plugin provides Computer Use itself. Windows apps need the documented Sky service and browsers need the direct CUA tool. Report the exact missing capability. Do not substitute OS event injection, private endpoints, Playwright/CDP drivers, or a new browser profile.
 
 ## Define a narrow task
 
 Supply only controls already observed and authorized:
 
 - `clickLabels`: exact labels or narrow regular expressions.
-- `textSlots`: prepared local values and their exact field labels. Prepared values are omitted from the Jev planner payload; the controlled application may transmit values entered into it.
+- `textSlots`: prepared local values and their exact field labels. Prepared values are omitted from the Jev planner payload; the controlled application may transmit values entered into it. Add `fieldRole:'text field'` when a combo box and its nested editor share a label; an ambiguous match stops without input.
 - `scrollRegions`: browser element labels, or Windows app points identified by Codex after a fresh screenshot.
 - `keys`: non-submitting shortcuts explicitly selected by Codex.
 - `verify(raw)`: a local success predicate tied to the requested final state.
@@ -38,14 +55,22 @@ The runtime rejects broad regular expressions, sensitive fields, and controls re
 
 ## Local fast path
 
-After binding `target`, import the adapter and create a session. Use actual labels from the fresh accessibility tree.
+After binding `target`, import the runtime and create a session. Use actual labels from the fresh accessibility tree. For Sky, create `target` with the adapter first:
+
+```js
+var skyAdapter = await import('file://PLUGIN_ROOT/scripts/sky-adapter.mjs');
+var target = skyAdapter.createSkyTarget({sky, window: selectedWindow});
+nodeRepl.write(await target.getAXState());
+```
+
+Inspect that observation before running the next cell. `selectedWindow` must be the unique real object selected from the returned inventory.
 
 ```js
 var reinforced = await import('file://PLUGIN_ROOT/scripts/runtime.mjs');
 var session = reinforced.createSession({
   target,
   kind: 'app',
-  platform: cua.computer.target,
+  platform: 'windows',
   targetName: 'Exact window title',
   goal: 'Open notification settings without changing any setting',
   clickLabels: ['Settings', 'Notifications'],
@@ -58,10 +83,10 @@ var result = await session.runPlan([
   {kind:'click', label:'Settings'},
   {kind:'click', label:'Notifications'}
 ]);
-nodeRepl.write(result);
+nodeRepl.write(JSON.stringify(result));
 ```
 
-For a browser tab, set `kind:'tab'` and provide `allowedOrigins`. A cross-origin iframe requires its exact origin in `allowedFrameOrigins`; without it, controls in that frame return `needs_codex_review` with no mutation. If the accessibility tree omits or truncates a child frame URL, inspect it with ordinary Computer Use and do not force the fast path. Plan steps may also reference a prepared field with `{kind:'fill', slot:'project-name'}` or an approved key with `{kind:'key', key:'Escape'}`. Do not put passwords, one-time codes, API keys, payment data, or other secrets into text slots.
+For a browser tab, set `kind:'tab'` and provide `allowedOrigins`. A cross-origin iframe requires its exact origin in `allowedFrameOrigins`; without it, controls in that frame return `needs_codex_review` with no mutation. If the accessibility tree omits or truncates a child frame URL, inspect it with ordinary Computer Use and do not force the fast path. Plan steps may also reference a prepared field with `{kind:'fill', slot:'project-name'}` or an approved key with `{kind:'key', key:'Escape'}`. Sky converts legacy shortcuts such as `ctrl+a` to `Control_L+a`. Submission and deletion key aliases are reserved for Codex; Windows key shortcuts are forbidden on Windows app targets. Do not put passwords, one-time codes, API keys, payment data, or other secrets into text slots.
 
 ## Long browser pages
 
@@ -80,13 +105,19 @@ The tab must start at the top. The helper requires the browser tab's `screenshot
 
 ## Optional Jev adaptive path
 
-Read [Jev setup](references/jev-setup.md) only when the user asks to configure or use adaptive mode, or when diagnosing it. Start the short-lived loopback bridge in a retained shell session, then inside CUA import `bridge-client.mjs`, create its client, and pass it to `createSession`.
+Read [Jev setup](references/jev-setup.md) only when the user asks to configure or use adaptive mode, or when diagnosing it. Run setup, doctor, and the short-lived loopback bridge in a retained terminal. For the Jev connection inside `node_repl` or CUA, import only `bridge-client.mjs`; keep provider credential handling and CLI scripts in the terminal.
+
+Always pass an explicit `descriptorPath` in the REPL. Obtain this machine's `configPath` from the terminal setup/doctor diagnostics (see the reference if doctor omits the path), then use `bridge.json` in that same directory. A restricted `node_repl` can omit global `process`, causing the default descriptor lookup to use `~/.config` instead of Windows `%APPDATA%`. Do not import `node:process` or infer environment variables to repair the lookup; use the observed local path.
 
 Set both `shareWithPlanner:true` and a deliberately scoped `plannerGoal`. The decision payload contains that goal, the target name, allowlisted control labels and states, prepared slot names, boolean observation names/values, and recent action descriptions. It omits screenshots, the full accessibility tree, text-slot values, and coordinates. The provider API key is sent in the HTTP Authorization header. Goal, target, and identifier text can still disclose private information; narrow regex redaction of labels is not a complete anonymity guarantee. Review [the data boundary](../../docs/PRIVACY.md) before sharing.
 
 ```js
+// Replace this placeholder with the configPath observed in the terminal.
+var rcuConfigPath = 'C:/absolute/path/reported-by-terminal/config.json';
+var rcuPath = await import('node:path');
+var rcuDescriptorPath = rcuPath.join(rcuPath.dirname(rcuConfigPath), 'bridge.json');
 var bridge = await import('file://PLUGIN_ROOT/scripts/bridge-client.mjs');
-var jevClient = await bridge.createLocalBridgeClient();
+var jevClient = await bridge.createLocalBridgeClient({descriptorPath: rcuDescriptorPath});
 var session = reinforced.createSession({
   target, client: jevClient, kind: 'app', platform: 'windows',
   targetName: 'Exact window title',

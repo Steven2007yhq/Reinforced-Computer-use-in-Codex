@@ -1,14 +1,18 @@
 import {readFile, stat} from 'node:fs/promises';
-import {bridgeDescriptorPath} from './provider.mjs';
+import {homedir, platform as osPlatform} from 'node:os';
+import {join} from 'node:path';
 
-export const defaultBridgeDescriptorPath = bridgeDescriptorPath();
+const localEnvironment = typeof process === 'undefined' ? {} : process.env;
+export const defaultBridgeDescriptorPath = osPlatform() === 'win32' && localEnvironment.APPDATA
+  ? join(localEnvironment.APPDATA, 'ReinforcedComputerUse', 'bridge.json')
+  : join(homedir(), '.config', 'reinforced-computer-use', 'bridge.json');
 
 export async function loadBridgeDescriptor(path = defaultBridgeDescriptorPath) {
   let info;
   let value;
   try { info = await stat(path); value = JSON.parse(await readFile(path, 'utf8')); }
   catch { throw new Error('BRIDGE_NOT_RUNNING'); }
-  if (process.platform !== 'win32' && (info.mode & 0o077) !== 0) throw new Error('BRIDGE_DESCRIPTOR_PERMISSIONS');
+  if (osPlatform() !== 'win32' && (info.mode & 0o077) !== 0) throw new Error('BRIDGE_DESCRIPTOR_PERMISSIONS');
   let url;
   try { url = new URL(value.url); }
   catch { throw new Error('BRIDGE_DESCRIPTOR_INVALID'); }
