@@ -26,18 +26,26 @@
 | --- | --- |
 | 没有 Computer Use 工具 | 当前聊天无法执行界面任务，插件不能启用 CUA；检查 Codex 配置与实际提供的工具。 |
 | 浏览器可用，但不能绑定原生应用 | 浏览器和原生接口分别提供。Windows 应检查文档规定的 `@oai/sky` 实际窗口清单，选择确切的 `Window` 并通过 [Sky 适配器](../skills/reinforced-computer-use/references/sky-adapter.md)绑定；也可使用已提供的旧原生 CUA 目标。进程运行不能证明接口可用。 |
-| `SKY_ACCESSIBILITY_UNAVAILABLE` | 原生服务没有返回 AX，批次在输入前停止。改用新截图下的普通 Computer Use，不要虚构编号控件。 |
+| `SKY_ACCESSIBILITY_UNAVAILABLE` | 原生服务没有返回 AX，AX 批次在输入前停止。改用新截图下的普通 Computer Use，或通过 [grounded 动作选择](../skills/reinforced-computer-use/references/grounded-actions.md)，由 Codex 重新定位同一个已允许的语义动作；不要虚构编号控件。 |
 | 终端桥接已启动，REPL 仍报 `BRIDGE_NOT_RUNNING` | REPL 可能没有全局 `process`，默认描述文件路径因此不同。显式传入由本机终端 `configPath` 得到的 `descriptorPath`，见 [Jev 配置](../skills/reinforced-computer-use/references/jev-setup.md)。 |
 | 首次 CUA 调用不接受导入插件 | 首次调用只执行一个文档规定的入口，读完返回文档后再导入运行时，见[技能说明](../skills/reinforced-computer-use/SKILL.md)。 |
 | 控件标签缺失或重复 | 用普通 Computer Use 查看新状态。使用已观察到的确切标签与窄范围限制，不要仅为匹配而扩大正则。 |
 | `needs_codex_review` / `needs_codex` | 检查当前状态并交还 Codex。控件可能敏感、frame 来源未授权或界面需要直接观察，遵循当前 CUA 权限策略。 |
 | `scope_changed` | 检查当前标签页/窗口、页面来源和账户上下文，重新确认正确范围后才继续。 |
-| `yielded` | 一轮预算用完，先检查进度；范围仍有效时可继续同一会话。 |
+| `yielded` | 一轮预算用完，先检查进度；范围仍有效时可继续同一 RCU 会话。对于 `createWorkflow()`，下一轮只从新状态验证已尝试的阶段，不重放该阶段动作。 |
 | `stale_state`、`no_progress`、`needs_inspection`、`budget_exceeded` | 停止快速循环，从新状态诊断。未经检查就增大预算或重放步骤，可能重复修改。 |
 | `done`，但结果不对 | 本地成功条件通过，条件本身可能不充分。检查真实结果，改进该任务的验证条件。 |
 | 跨源 frame 被阻止 | 适合当前任务时，确认确切来源并在 `allowedFrameOrigins` 中明确授权。树中来源缺失或被截断时，回到普通检查，不强行执行。 |
+| 模态框中的编号输入失败 | 查看新窗口清单和实际对话框状态，绑定确切返回的模态框/编辑器 Window，再观察该窗口自己的编号。父窗口树中出现控件不足以证明编号可执行；正确绑定可能修复上下文不匹配，但不能证明底层支持该控件。输入结果不确定时先检查，不重放。 |
+| 视频/画布变化，AX 却显示无进度 | 查看新截图并使用该软件的阶段验证器。真实视觉效果可能不改变 AX 文本，不放宽成功条件，也不重复输入来制造文本变化。 |
+| Workflow 返回 handoff | 在本地保留 `handoff.ticket`/`revision`，检查实际待完成阶段，只执行已允许的接续。`resume()` 读取新结果，不释放旧输入进行重放。见[workflow 规则](../skills/reinforced-computer-use/references/workflow.md)。 |
+| `INVALID_WORKFLOW_TICKET` / `WORKFLOW_BUSY` | 使用该 workflow 最新的本地 ticket/revision，并串行调用。JSON 副本、旧票据或另一个 workflow 的票据不能接续；取消后，未结束的回调仍持有锁。 |
+| Grounded `expired`、`cancelled`、`busy`、`invalid_ticket`、`ticket_consumed` | 不授权任何额外输入，停止并检查当前状态和原因。不能准备替代票据来重放不确定输入。 |
+| Grounded `needs_verification` / `failed_verification` | DONE 只是建议；本地验证为 false 仍属失败。检查实际结果，`executed:true` 只表示调用过本地执行器，不能证明原生输入成功。 |
 
 画布、拖放、文件选择器、图形判断、没有可访问性信息的控件与重要的最终提交步骤使用普通 Computer Use。插件不会取消当前权限要求。
+
+0.4.0 可以把这些接续保留为 workflow 阶段，并让 Jev 选择一个已限定的语义动作；新截图定位、必要检查与独立验收仍由 Codex 完成。模块提供流程组织，不自带具体软件的导入/导出或编辑逻辑。准备文本和坐标留在可信的本地回调中。
 
 ## 长网页截图
 
@@ -57,6 +65,8 @@
 - 低置信度或不合适的决策：查看新界面状态，不降低置信度要求来强行执行。
 
 自适应模式发送规划元数据，提供商通过认证头收到 API Key。数据边界见[隐私说明](PRIVACY.md)。
+
+比较速度时，`latencyMs` 是 provider 客户端测量的请求耗时，不是服务端计算字段。workflow 回调尝试、UI 输入和 Jev 决策应分别计数；完整耗时还须包含启动、观察、验证与 Codex 接续，单次请求延迟或模型 DONE 不能证明加速倍率。
 
 ## 报告问题
 

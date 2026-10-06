@@ -14,6 +14,23 @@ const ALIASES = Object.freeze({
   numpad_divide: 'KP_Divide', numpad_decimal: 'KP_Decimal', numpad_enter: 'KP_Enter',
 });
 
+// Sky ClickInput accepts these exact MouseButton spellings. Do not silently
+// drop a requested right/middle click or collapse repeated clicks to one.
+const MOUSE_BUTTONS = new Set(['left', 'right', 'middle', 'l', 'r', 'm']);
+
+function clickOptions(point) {
+  const options = {};
+  if (point?.mouse_button !== undefined) {
+    if (!MOUSE_BUTTONS.has(point.mouse_button)) throw new Error('SKY_INVALID_MOUSE_BUTTON');
+    options.mouse_button = point.mouse_button;
+  }
+  if (point?.click_count !== undefined) {
+    if (!Number.isSafeInteger(point.click_count) || point.click_count <= 0) throw new Error('SKY_INVALID_CLICK_COUNT');
+    options.click_count = point.click_count;
+  }
+  return options;
+}
+
 export function toSkyKey(key) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('SKY_INVALID_KEY');
   const tokens = key.split('+').map(token => token.trim());
@@ -169,7 +186,7 @@ export function createSkyTarget({sky, window, screenScale} = {}) {
       return exclusive(async () => {
         const observation = typeof target === 'number' ? requireElement(target) : requireObservation();
         const args = typeof target === 'number' ? {element_index: target}
-          : pointArgs(target, observation);
+          : {...pointArgs(target, observation), ...clickOptions(target)};
         return input(() => sky.click({window: observation.window, ...args}));
       });
     },

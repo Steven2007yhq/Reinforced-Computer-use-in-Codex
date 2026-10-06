@@ -13,6 +13,7 @@ Resolve `PLUGIN_ROOT` as two directories above this skill directory. Always impo
 
 - Use `runPlan()` when the current workflow is known and the permitted control labels are visible. This is the default: it requires no external account and removes model round trips while still re-observing before every mutation.
 - Use `runAdaptive()` only when several screens can branch and the next safe control must be selected from current UI state. It requires an explicitly configured Jev provider and `shareWithPlanner: true`.
+- Use `createWorkflow()` to retain ordered stage progress across RCU chunks and Codex handoffs. When native AX is weak or unavailable, use grounded `prepare()` → fresh Codex screenshot inspection → `commit()` for one already permitted semantic action; Jev does not see or interpret the screenshot.
 - Use ordinary Computer Use for one-off actions, graphical judgment, canvas, drag-and-drop, file pickers, inaccessible controls, and any consequential final step.
 
 This build is Windows-first. Browser tabs are also supported. For Windows apps, use the Sky adapter with an exact returned `Window` from `sky.list_windows()` or `sky.list_apps()`; never select the first matching window by assumption. Sky text replacement uses one indexed `set_value` call. Native Windows scrolling requires a caller-supplied coordinate and a fresh screenshot; the runtime does not invent coordinates. Legacy CUA app targets remain supported with focus → Ctrl+A → type.
@@ -30,9 +31,11 @@ globalThis.windows = await sky.list_windows();
 nodeRepl.write(JSON.stringify(windows, null, 2));
 ```
 
-Inspect the inventory, bind the exact returned window, import `scripts/sky-adapter.mjs`, and observe its tree before preparing an action. See [Sky adapter](references/sky-adapter.md) for binding, coordinates, shortcuts, and recovery.
+Inspect the inventory, bind the exact returned window, import `scripts/sky-adapter.mjs`, and observe its current state before preparing an action. Use the actual tree for indexed actions; use a fresh screenshot for Codex visual grounding. See [Sky adapter](references/sky-adapter.md) for binding, coordinates, shortcuts, and recovery.
 
-`getAXState()` explicitly fails with `SKY_ACCESSIBILITY_UNAVAILABLE` when the native service returns no accessibility tree. The batch runtime hands control back without input. Use ordinary screenshot-grounded Computer Use for that app; never fabricate indexed controls from pixels or document text.
+For native Sky inputs, follow the installed Computer Use guidance's two-cell loop. Capture the AX state or screenshot in an observation-only cell and end that cell. Codex inspects the displayed result. In the next cell, perform exactly one input using that observation and immediately capture fresh state, then stop again. An internal refresh or a boolean callback is not a substitute for this model inspection. Do not run a native multi-input batch that consumes newly captured control numbers or coordinates before Codex has inspected them. Sky displays returned screenshots automatically; do not re-emit or decode their payload just to inspect them.
+
+`getAXState()` explicitly fails with `SKY_ACCESSIBILITY_UNAVAILABLE` when the native service returns no accessibility tree. AX batch sessions hand control back without input. Ordinary screenshot-grounded Computer Use remains available when the supported screenshot/input APIs work. The [grounded action helper](references/grounded-actions.md) can let Jev choose among Codex-observed semantic actions before Codex freshly grounds one input; it never fabricates indexed controls from pixels or document text.
 
 ## Bootstrap browser and legacy CUA targets
 
@@ -65,17 +68,19 @@ nodeRepl.write(await target.getAXState());
 
 Inspect that observation before running the next cell. `selectedWindow` must be the unique real object selected from the returned inventory.
 
+For native inputs that need the next screen's controls, use the single-input grounded continuation below. The multi-action plan example here is for a browser tab already bound through its documented browser API; `observedOrigin` must come from that tab's inspected state:
+
 ```js
 var reinforced = await import('file://PLUGIN_ROOT/scripts/runtime.mjs');
 var session = reinforced.createSession({
   target,
-  kind: 'app',
-  platform: 'windows',
-  targetName: 'Exact window title',
+  kind: 'tab',
+  allowedOrigins: [observedOrigin],
+  targetName: 'Exact observed tab title',
   goal: 'Open notification settings without changing any setting',
   clickLabels: ['Settings', 'Notifications'],
   verify: raw => raw.includes('Notification settings'),
-  scopeCheck: raw => raw.includes('Exact window title'),
+  scopeCheck: raw => raw.includes('Exact observed tab title'),
   maxSteps: 12,
   maxTotalMs: 60000
 });
@@ -86,7 +91,7 @@ var result = await session.runPlan([
 nodeRepl.write(JSON.stringify(result));
 ```
 
-For a browser tab, set `kind:'tab'` and provide `allowedOrigins`. A cross-origin iframe requires its exact origin in `allowedFrameOrigins`; without it, controls in that frame return `needs_codex_review` with no mutation. If the accessibility tree omits or truncates a child frame URL, inspect it with ordinary Computer Use and do not force the fast path. Plan steps may also reference a prepared field with `{kind:'fill', slot:'project-name'}` or an approved key with `{kind:'key', key:'Escape'}`. Sky converts legacy shortcuts such as `ctrl+a` to `Control_L+a`. Submission and deletion key aliases are reserved for Codex; Windows key shortcuts are forbidden on Windows app targets. Do not put passwords, one-time codes, API keys, payment data, or other secrets into text slots.
+Browser tabs require observed `allowedOrigins`. A cross-origin iframe requires its exact origin in `allowedFrameOrigins`; without it, controls in that frame return `needs_codex_review` with no mutation. If the accessibility tree omits or truncates a child frame URL, inspect it with ordinary Computer Use and do not force the fast path. Plan steps may also reference a prepared field with `{kind:'fill', slot:'project-name'}` or an approved key with `{kind:'key', key:'Escape'}`. Sky converts legacy shortcuts such as `ctrl+a` to `Control_L+a`. Submission and deletion key aliases are reserved for Codex; Windows key shortcuts are forbidden on Windows app targets. Do not put passwords, one-time codes, API keys, payment data, or other secrets into text slots.
 
 ## Long browser pages
 
@@ -98,7 +103,7 @@ var capture = await longPage.captureLongPage(target, {
   outputPath: 'C:/absolute/path/to/output/page.png',
   maxScrolls: 60
 });
-nodeRepl.write(capture);
+nodeRepl.write(JSON.stringify(capture));
 ```
 
 The tab must start at the top. The helper requires the browser tab's `screenshot`, `scroll`, `pressKey`, and read-only `playwright.evaluate` APIs. For pages above the default 60 million pixel memory limit, it saves numbered viewport images instead of allocating a huge stitched image. Verify the top and bottom of the saved output visually before reporting it complete. Include a requested screenshot inline in the final answer.
@@ -119,19 +124,67 @@ var rcuDescriptorPath = rcuPath.join(rcuPath.dirname(rcuConfigPath), 'bridge.jso
 var bridge = await import('file://PLUGIN_ROOT/scripts/bridge-client.mjs');
 var jevClient = await bridge.createLocalBridgeClient({descriptorPath: rcuDescriptorPath});
 var session = reinforced.createSession({
-  target, client: jevClient, kind: 'app', platform: 'windows',
-  targetName: 'Exact window title',
+  target, client: jevClient, kind: 'tab', allowedOrigins: [observedOrigin],
+  targetName: 'Exact observed tab title',
   goal: 'Local full goal', plannerGoal: 'Open notification settings',
   shareWithPlanner: true,
   clickLabels: ['Settings', 'Notifications'],
   verify: raw => raw.includes('Notification settings'),
-  scopeCheck: raw => raw.includes('Exact window title')
+  scopeCheck: raw => raw.includes('Exact observed tab title')
 });
 var result = await session.runAdaptive({maxMs:18000, maxActions:8});
-nodeRepl.write(result);
+nodeRepl.write(JSON.stringify(result));
 ```
 
-Reuse the same session across `yielded` chunks. Never lower the confidence floor just to force progress.
+Reuse the same session across `yielded` chunks. Never lower the confidence floor just to force progress. This browser loop does not authorize bypassing native Sky's observation-only cell and model inspection between state-derived inputs.
+
+## Native multi-stage continuation
+
+Version 0.4.0 adds [local workflows](references/workflow.md) and [grounded actions](references/grounded-actions.md). The workflow stores stage progress, not UI authority. Each stage has one action attempt and fresh independent verification; a `done` response alone cannot advance it. After a handoff, Codex handles only the authorized pending work and `resume()` freshly verifies the result without replaying the stored action. Do not restart a workflow to replay an uncertain input.
+
+The shortest two-stage pattern is:
+
+```js
+var workflows = await import('file://PLUGIN_ROOT/scripts/workflow.mjs');
+var task = workflows.createWorkflow({
+  session,
+  observe: captureFreshTarget,
+  scopeCheck: sameApprovedTarget,
+  stages: [
+    {id:'open', needsReview:true, run:() => 'needs_codex_review', verify:documentIsLoaded},
+    {id:'play', needsReview:true, run:() => 'needs_codex_review', verify:playbackActuallyAdvanced},
+  ],
+  verify: requestedFinalState,
+});
+var progress = await task.run({maxStages:1, maxMs:5000});
+nodeRepl.write(JSON.stringify(progress));
+```
+
+These observation, scope, execution and verification callbacks are local functions supplied by Codex for the actual app; they are not additional APIs or Jev-generated code. `observe` must obtain a fresh real observation each time. Scope, stage and final predicates must return strict booleans. Both native stages deliberately hand control back before input, so Codex can inspect each new screenshot. Keep `maxStages:1` at native visual boundaries; the helper does not pause a callback internally for model inspection.
+
+For each pending stage, Codex first observes and allows the semantic candidates, then calls grounded `prepare({client:jevClient,shareWithPlanner:true,plannerGoal,targetName,observation,scope:true,candidates})`. `observation` contains only booleans. A successful ticket exposes only `selectedAction`; low confidence, invalid choices, DONE/BLOCKED, expiry and cancellation produce no executable ticket. Capture a new screenshot in an observation-only cell and end the cell. Codex inspects the returned image, establishes the exact window and stage, and re-grounds that same semantic action. Only in the next cell call `commit(actionTicket,{execute,verify,scopeCheck})`: `execute` performs exactly one input using the inspected observation and immediately refreshes the target. Scope checks must not silently replace the observation from which that input was grounded. Coordinates, prepared values and Window IDs stay local; the ticket never grants permission. Sensitive and consequential controls and Enter/Delete/Windows-key aliases still hand off for ordinary Computer Use.
+
+`verify` may return true from independent, freshly read AX or file evidence. It cannot claim to have visually inspected a screenshot emitted during the same cell. If only visual evidence is available, hand control back for Codex's next inspection and independently verify the pending workflow on resume; never hard-code true merely because input returned successfully.
+
+When save/AX/title feedback is delayed after an input, use the [read-only
+verification helper](references/read-only-verification.md). Its callbacks only
+read fresh local state; it has no input or provider transport. Keep exact Window
+ID/app and the permitted stage in scope checks, treat changing titles as result
+signals, and return `result.verified === true` from a workflow verifier. Timeout
+or uncertain feedback retains the current handoff; never resend the edit/save.
+
+After the permitted action and independent result check, resume the pending workflow:
+
+```js
+var progress = await task.resume({
+  ticket: progress.handoff.ticket,
+  revision: progress.handoff.revision,
+  maxStages:1,
+});
+nodeRepl.write(JSON.stringify(progress));
+```
+
+The workflow handoff ticket and grounded action ticket are different local capabilities. Keep both in local variables; neither can be reconstructed from serialized metadata. Modals and editor windows require their own freshly enumerated exact binding. Seeing a control in a parent tree does not prove its index is executable against a different Window. Neither helper supplies application-specific file import, timeline editing, export or circuit-design logic. Their callbacks must perform and verify those authorized operations through documented Computer Use.
 
 ## Interpret and verify
 
@@ -139,6 +192,7 @@ Reuse the same session across `yielded` chunks. Never lower the confidence floor
 - `yielded`: a bounded chunk ended; inspect progress and continue the same session only if the scope is still valid.
 - `needs_codex_review`, `needs_codex`, `low_confidence`, `scope_changed`, or `failed_verification`: inspect the current UI and hand control back to Codex. Do not automatically replay an uncertain mutation.
 - `stale_state`, `no_progress`, `budget_exceeded`, or `needs_inspection`: stop the fast loop and diagnose from fresh state.
+- Grounded `needs_verification` is an advisory DONE, not success. `expired`, `cancelled`, `busy`, `invalid_ticket` and `ticket_consumed` never authorize another input. Workflow `yielded` preserves stage progress; its next run verifies an attempted stage without invoking that stage's action again.
 - Provider/configuration errors occur before another UI mutation. Do not silently switch providers or search unrelated files for credentials.
 
-Keep traces in memory unless the user asks to save them. Returned traces omit text-slot values but can contain control labels, so summarize rather than dumping them when labels may be sensitive. Report exact action count, decision count, elapsed time, handoffs, and what was independently verified; do not claim a universal speedup.
+Keep traces in memory unless the user asks to save them. Returned traces omit text-slot values but can contain control labels, so summarize rather than dumping them when labels may be sensitive. Report runtime action/decision counts separately from workflow callback counts. `latencyMs` is the provider client's measured request elapsed time, not a server-reported compute time or whole-task duration. Include observation, input, verification, setup and Codex handoff time when measuring a complete workflow; do not claim a universal speedup.

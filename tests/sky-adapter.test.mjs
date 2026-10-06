@@ -237,6 +237,72 @@ test('target converts explicit physical scale and canonical key format without e
   assert.equal(sky.calls.length, 4);
 });
 
+test('point clicks preserve every documented Sky mouse-button spelling and explicit click counts', async () => {
+  for (const [mouse_button, click_count] of [
+    ['left', 1], ['right', 2], ['middle', 3], ['l', 1], ['r', 2], ['m', 3],
+  ]) {
+    const sky = mockSky();
+    const target = targetFor(sky);
+    await target.getScreenshot();
+    const point = {x: 30.8, y: 40.2, space: 'screenshot', screenshotId: 'popup',
+      observationId: target.observationId(), mouse_button, click_count};
+    const original = structuredClone(point);
+    await target.click(point);
+    assert.deepEqual(sky.calls.at(-1), ['click', {window: sky.state.window,
+      x: 30, y: 40, screenshotId: 'popup', mouse_button, click_count}]);
+    assert.deepEqual(point, original, 'passing click options must not mutate caller coordinates');
+    assert.deepEqual(sky.calls.map(([method]) => method), ['get_window_state', 'click']);
+    assert.equal(target.latestState(), null, 'a multi-click remains one dispatch consuming its observation');
+  }
+});
+
+test('click options remain optional and image conversion preserves their exact values', async () => {
+  for (const options of [{mouse_button: 'right'}, {click_count: 2}, {mouse_button: undefined, click_count: undefined}]) {
+    const sky = mockSky();
+    const target = targetFor(sky);
+    await target.getScreenshot();
+    await target.click({x: 60, y: 80, space: 'image', screenshotId: 'popup',
+      imageWidth: 600, imageHeight: 400, observationId: target.observationId(), ...options});
+    const expectedOptions = Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined));
+    assert.deepEqual(sky.calls.at(-1), ['click', {window: sky.state.window,
+      x: 30, y: 40, screenshotId: 'popup', ...expectedOptions}]);
+  }
+});
+
+test('invalid point-click options reject before dispatch without consuming the current observation', async () => {
+  const sky = mockSky();
+  const target = targetFor(sky);
+  await target.getScreenshot();
+  const point = {x: 20, y: 30, space: 'screenshot', screenshotId: 'popup', observationId: target.observationId()};
+  for (const mouse_button of ['Right', 'secondary', '', 1, null, {}, ['right']]) {
+    await assert.rejects(target.click({...point, mouse_button}), /SKY_INVALID_MOUSE_BUTTON/);
+  }
+  for (const click_count of [0, -1, 1.5, NaN, Infinity, '2', null, true, {}, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(target.click({...point, click_count}), /SKY_INVALID_CLICK_COUNT/);
+  }
+  assert.deepEqual(sky.calls.map(([method]) => method), ['get_window_state']);
+  assert.equal(target.observationId(), point.observationId);
+  assert.ok(target.latestState(), 'rejected options never dispatched an input');
+  await target.click({...point, mouse_button: 'right', click_count: 2});
+  assert.deepEqual(sky.calls.at(-1), ['click', {window: sky.state.window,
+    x: 20, y: 30, screenshotId: 'popup', mouse_button: 'right', click_count: 2}]);
+  assert.equal(target.latestState(), null);
+});
+
+test('an unknown right-click outcome retains options but never retries the dispatched input', async () => {
+  const sky = mockSky();
+  sky.click = async args => { sky.calls.push(['click', args]); throw new Error('input outcome unknown'); };
+  const target = targetFor(sky);
+  await target.getScreenshot();
+  const point = {x: 40, y: 50, mouse_button: 'right', click_count: 2};
+  await assert.rejects(target.click(point), /input outcome unknown/);
+  assert.deepEqual(sky.calls.at(-1), ['click', {window: sky.state.window,
+    x: 40, y: 50, screenshotId: 'main', mouse_button: 'right', click_count: 2}]);
+  assert.equal(target.latestState(), null);
+  await assert.rejects(target.click(point), /SKY_FRESH_STATE_REQUIRED/);
+  assert.deepEqual(sky.calls.map(([method]) => method), ['get_window_state', 'click']);
+});
+
 test('target rejects points from earlier captures even when native screenshot identifiers repeat', async () => {
   const sky = mockSky();
   const target = targetFor(sky);

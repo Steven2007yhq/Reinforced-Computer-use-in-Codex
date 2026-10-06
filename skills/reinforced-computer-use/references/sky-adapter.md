@@ -27,7 +27,7 @@ When accessibility is null, `getAXState()` throws `SKY_ACCESSIBILITY_UNAVAILABLE
 Sky prepared-field filling uses one `set_value({element_index,value,window})`. Add `fieldRole` to a text slot when a combo box and its editor share the same label/ID:
 
 ```js
-textSlots: [{name:'path', fieldLabel:'1003', fieldRole:'text field', value:'D:\\ReinforcedComputerUse'}]
+textSlots: [{name:'path', fieldLabel:'1003', fieldRole:'text field', value:'D:\\fixtures'}]
 ```
 
 There is no silent fallback if the native field does not support replacement. Inspect its fresh state and choose an ordinary Computer Use action.
@@ -60,6 +60,14 @@ await target.getScreenshot();
 ```
 
 Batch scroll regions still capture a new screenshot immediately before scrolling. Use stable observed window coordinates (`point:[x,y]` or `space:'window'`) for batch scrolling. Points tied to an old observation fail instead of being silently reused after that refresh. Scroll directions map to signed `scrollX/scrollY`; Sky scrolling never receives `element_index`.
+
+Point clicks also accept the documented Sky `mouse_button` values `left`, `right`,
+`middle`, `l`, `r`, or `m`, and `click_count` as a positive safe integer. These
+options pass through unchanged; omitting them preserves Sky's defaults. Invalid
+options fail before dispatch and keep the current observation. A dispatched
+right or repeated click consumes its observation even if its outcome is unknown.
+For example, add `click_count:2` to a freshly grounded component point to open
+its properties. Each call is still one input followed by a fresh inspection.
 
 ## Keys and outcomes
 

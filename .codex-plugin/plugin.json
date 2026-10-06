@@ -1,7 +1,7 @@
 {
   "name": "reinforced-computer-use",
-  "version": "0.3.0",
-  "description": "Windows-first bounded Computer Use loops with a Sky window2 adapter, verified screenshot coordinates, local deterministic plans, optional Jev decisions, and safety handoffs.",
+  "version": "0.4.0",
+  "description": "Windows-first bounded Computer Use with a Sky window2 adapter, local multi-stage workflows, optional Jev action selection, Codex visual grounding, and independent verification.",
   "author": {
     "name": "Steven2007yhq"
   },
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Reinforced Computer Use",
     "shortDescription": "Windows 优先的多步骤界面操作与长网页捕获",
-    "longDescription": "Codex 负责目标、权限和最终验收；本插件通过现有 Computer Use 接口执行有范围和预算限制的本地计划，或让可选 Jev 决策器从允许的动作中选择下一步。每次动作前重新观察和校验目标；识别到需审批的控件、状态不确定或验收失败时交还 Codex。",
+    "longDescription": "Codex 负责目标、权限、截图定位和最终验收；本插件通过现有 Computer Use 接口执行有限本地计划，保存多阶段接续进度，或让可选 Jev 从已允许的语义动作中选择下一步。缺少 AX 时由 Codex 根据新截图定位后单次执行，不赋予 Jev 视觉能力。范围变化、需检查的动作、输入不确定或验证失败时交还 Codex，接续不重放旧输入。",
     "developerName": "Steven2007yhq",
     "category": "Productivity",
     "capabilities": [],

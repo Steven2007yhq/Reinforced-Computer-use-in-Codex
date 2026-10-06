@@ -1,10 +1,22 @@
 # 隐私与数据流
 
-默认 `runPlan()` 不使用 Jev 决策接口。`runAdaptive()` 需要调用方明确设置 `shareWithPlanner: true`，并提供单独的 `plannerGoal`。这是发送规划元数据的选择，不是对所有界面信息自动匿名化的保证。
+默认 `runPlan()` 不使用 Jev 决策接口。`runAdaptive()` 和 grounded `prepare()` 需要调用方明确设置 `shareWithPlanner: true`，并提供单独的 `plannerGoal`。这是发送规划元数据的选择，不是对所有界面信息自动匿名化的保证。0.4.0 的 `createWorkflow()` 只在本地管理阶段；它不自行调用 Jev。
 
 本说明针对本仓库代码的行为。Codex、Computer Use、目标应用/网站以及所选提供商各自的数据处理规则仍然适用。
 
-## 哪些数据会发给 Jev
+## 各执行路径的数据边界
+
+| 路径 | 本仓库 helper 自身的行为 |
+| --- | --- |
+| `runPlan()` | 本地读取和执行已准备的计划，不调用 Jev 决策接口 |
+| `runAdaptive()` | 经显式授权发送下文列出的规划元数据；`plannerGoal` 和 `targetName` 原样发送 |
+| grounded `prepare()` | 经显式授权发送最小语义候选和布尔观察，部分文本做启发式替换；不发送截图供 Jev 视觉判断 |
+| grounded `commit()` | 调用 Codex 提供的本地执行、范围和验证 callbacks，不自行调用提供商或 Computer Use |
+| `createWorkflow()` | 本地阶段、验证和交接管理，无提供商请求、UI 客户端、持久化或日志传输 |
+
+最后两项的边界针对 helper 自身，不约束调用方提供的 callbacks。callback 可以调用 `runAdaptive()`、其他网络服务或目标应用；这些调用分别遵循自身的数据边界。两个新 helper 都不提供导入文件、编辑电路、剪辑时间线或导出媒体的业务逻辑，实际输入及结果验证由本地 callbacks 承担。
+
+## `runAdaptive()` 会发给 Jev 的数据
 
 自适应调用通过以下路径发送：
 
@@ -26,6 +38,30 @@
 运行时**不把完整可访问性树、截图、`textSlots` 的准备文本值、滚动坐标或本地 `goal` 放入这个规划 JSON**。会话仍会在本地读取可访问性树用于操作和验证；`latestState()` 可以返回最近的原始状态。若调用方把这些内容另行记录、打印、复制进目标名称或规划目标，便不再受到上述 JSON 字段边界保护。
 
 控件标签和动作描述只做有限的正则替换，例如部分密钥格式、Bearer 文本和电子邮箱。`plannerGoal`、`targetName`、观察项名称和准备槽名称没有统一匿名化处理。规则无法可靠识别所有令牌、身份证号、用户名、文件名、业务编号或自然语言中的秘密。控件标签自身也可能已经包含输入内容，因此排除准备文本值并不能保证请求中不存在相同内容。
+
+## grounded `prepare()` 会发给 Jev 的数据
+
+[grounded action helper](../skills/reinforced-computer-use/references/grounded-actions.md) 让 Jev 从 Codex 已观察且允许的候选中选择一个语义动作。Codex 随后检查新的真实截图，在本机重新定位同一动作。Jev 不接收或解释图片；弱 AX 或 AX 为 null 时也不会从截图伪造控件编号。
+
+| 信息 | 实际行为 |
+| --- | --- |
+| `plannerGoal`、`targetName` | 进入规划状态前做有限正则替换；仍须使用最小目标和非私人目标名称 |
+| `observation`、`scope` | 只接受严格布尔值；观察项可以是短 ASCII 名称到布尔值的映射，名称原样发送 |
+| 允许候选 | 发送动作 ID、kind、经过有限处理的 description/label，以及 fill 的 `slotName`；动作 ID 原样发送 |
+| 决策问题 | 候选 ID 对应的处理后描述，以及 DONE/BLOCKED 和选择规则 |
+| 本地操作参数 | 不从候选读取截图、坐标、AX、准备文本值或 Window 对象/ID；key 动作的实际按键字符串也不放入规划 JSON |
+
+这个路径的替换覆盖部分密钥格式、Bearer 文本、电子邮箱、显式写作 `Window ID`/`HWND` 的编号和部分 Windows 绝对路径。它是启发式处理，不是可靠匿名化。裸编号、其他路径格式、用户名、业务编号和自然语言中的秘密仍可能留在目标、描述或标识中。不要把真实界面内容或准备文本复制到这些字段；候选 ID 和观察项名称应使用合成的业务中性名称。旧 `runAdaptive()` 不因此获得相同的目标文本替换。
+
+`shareWithPlanner:true` 仍是必要的显式授权。准备时遇到识别出的敏感字段、外部或其他 consequential 动作，以及 Enter/Delete/Windows-key 等受限按键，会在提供商调用前交回 `needs_codex_review`。这些启发式门禁不证明其他动作安全，也不代替当前 Computer Use 的权限规则。`execute` 必须执行已选且已允许的同一动作，`verify` 必须基于独立证据返回严格布尔值；Jev 的 DONE 或信心分数不能证明成功。
+
+## 两种本地 ticket 和结果元数据
+
+grounded 成功准备的 ticket 只公开 `selectedAction`，其中保留本地候选原有的 ID、kind、description、label，以及相应 key 或 `slotName`。这些本地文本不保证已脱敏。模块在进程内的 `WeakMap` 中保存 ticket 身份、所选动作、过期和消费状态、取消信号，以及经过格式检查的模型名和客户端测得的 `latencyMs`。返回结果省略原始提供商响应、概率分布和 usage；`latencyMs` 不是服务端计算时间或整个 UI 工作流耗时。ticket 不持久化，不能由 JSON 重建，也不能重放已经尝试过的输入。
+
+[workflow helper](../skills/reinforced-computer-use/references/workflow.md) 将 session、callbacks 和真实观察保留在本地。`snapshot()` 和普通结果元数据包含阶段 ID、状态、当前索引、计数和固定原因；它们不包含原始观察或 callback 返回的业务数据。交接结果还包含阶段 ID 和 revision；可执行的 handoff ticket 绑定当前 workflow 和 revision，并且不可枚举，不进入普通 JSON 或对象展开。它与 grounded ticket 是两种不同的本地能力，不能互换。
+
+两个 helper 不自动保存这些数据。阶段 ID、动作标签、槽名称和调用方自己的日志仍可能泄露私人信息；使用合成标识，保留 live ticket 在本机，不发布原始结果对象或自行序列化能力。取消和过期可以阻止后续 callback，但不能撤销已经发给目标应用的输入。未知输入错误需要重新观察，不应新建 ticket 或 workflow 来自动重试。
 
 ## 密钥和本地桥接令牌
 
