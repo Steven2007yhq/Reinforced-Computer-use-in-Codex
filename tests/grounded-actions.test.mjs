@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import {prepare, commit, cancel} from '../scripts/grounded-actions.mjs';
 import {createSkyTarget} from '../scripts/sky-adapter.mjs';
 
@@ -16,6 +17,19 @@ function options(extra = {}) {
     candidates: [click], shareWithPlanner: true, client: async (_state, questions) => answer(questions), ...extra};
 }
 const callbacks = extra => ({execute: async () => {}, verify: async () => true, scopeCheck: async () => true, ...extra});
+
+function invalidSignals() {
+  const throwing = new AbortController().signal;
+  Object.defineProperty(throwing, 'aborted', {get() { throw new Error('PRIVATE_SIGNAL_GETTER'); }});
+  const nonboolean = new AbortController().signal;
+  Object.defineProperty(nonboolean, 'aborted', {value: 1});
+  const revoked = Proxy.revocable(new AbortController().signal, {});
+  revoked.revoke();
+  return [null, false, 'signal', {}, {aborted: false}, {aborted: true},
+    {aborted: false, addEventListener() {}, removeEventListener() {}},
+    Object.create(AbortSignal.prototype), new Proxy(new AbortController().signal, {}),
+    revoked.proxy, throwing, nonboolean];
+}
 
 test('one decision produces an opaque immutable ticket, not raw response or executable model output', async () => {
   let calls = 0;
@@ -222,15 +236,77 @@ test('expiry during an awaited post-input scope check prevents the verifier with
 });
 
 test('invalid signal setup consumes the reserved ticket without stranding it or dispatching input', async () => {
-  const ticket = await prepare(options());
-  let executed = 0;
-  const result = await commit(ticket, callbacks({signal: {aborted: false},
-    execute: async () => { executed++; }}));
+  for (const signal of invalidSignals()) {
+    const ticket = await prepare(options());
+    const calls = [];
+    const result = await commit(ticket, {signal,
+      scopeCheck: () => { calls.push('scope'); return true; },
+      execute: () => { calls.push('execute'); },
+      verify: () => { calls.push('verify'); return true; }});
+    assert.equal(result.status, 'needs_inspection');
+    assert.equal(result.executed, false);
+    assert.equal(result.verified, false);
+    assert.deepEqual(calls, []);
+    assert.equal(JSON.stringify(result).includes('PRIVATE_SIGNAL_GETTER'), false);
+    assert.equal((await commit(ticket, callbacks())).status, 'ticket_consumed');
+  }
+  assert.equal((await commit(await prepare(options()), callbacks())).status, 'done');
+});
+
+test('invalid preparation signals reject before any provider call', async () => {
+  let calls = 0;
+  for (const signal of invalidSignals()) {
+    await assert.rejects(prepare(options({signal, client: async () => { calls++; }})),
+      {message: 'GROUNDED_INVALID_SIGNAL'});
+  }
+  assert.equal(calls, 0);
+});
+
+test('a preparation signal with an invalidated accessor consumes its commit ticket', async () => {
+  const signal = new AbortController().signal;
+  const ticket = await prepare(options({signal}));
+  const calls = [];
+  let reentrant;
+  Object.defineProperty(signal, 'aborted', {get() {
+    reentrant = commit(ticket, callbacks({execute: () => { calls.push('reentrant'); }}));
+    throw new Error('PRIVATE_LATE_SIGNAL_GETTER');
+  }});
+  const result = await commit(ticket, {
+    scopeCheck: () => { calls.push('scope'); return true; },
+    execute: () => { calls.push('execute'); },
+    verify: () => { calls.push('verify'); return true; },
+  });
   assert.equal(result.status, 'needs_inspection');
   assert.equal(result.executed, false);
-  assert.equal(executed, 0);
+  assert.equal((await reentrant).status, 'busy');
+  assert.deepEqual(calls, []);
+  assert.equal(JSON.stringify(result).includes('PRIVATE_LATE_SIGNAL_GETTER'), false);
   assert.equal((await commit(ticket, callbacks())).status, 'ticket_consumed');
-  assert.equal((await commit(await prepare(options()), callbacks())).status, 'done');
+});
+
+test('genuine signal validation and commit work without EventTarget or process globals', () => {
+  const moduleUrl = new URL('../scripts/grounded-actions.mjs', import.meta.url).href;
+  const script = `
+    import assert from 'node:assert/strict';
+    delete globalThis.EventTarget;
+    delete globalThis.process;
+    const {prepare, commit} = await import(${JSON.stringify(moduleUrl)});
+    const signal = new AbortController().signal;
+    const ticket = await prepare({plannerGoal: 'Open approved settings', targetName: 'Fixture',
+      observation: true, scope: true, candidates: [{id:'open', kind:'click', label:'Open settings', description:'Open settings'}],
+      shareWithPlanner: true, signal, client: async (_state, questions) => ({answers: {next: {
+        type:'choice', choice:'open', confidence:1,
+        probabilities:Object.fromEntries(Object.keys(questions.next.criteria).map(id => [id, id === 'open' ? 1 : 0])),
+      }}})});
+    const result = await commit(ticket, {signal, scopeCheck: () => true, execute: () => {}, verify: () => true});
+    assert.equal(result.status, 'done');
+    assert.equal((await commit(ticket, {signal})).status, 'ticket_consumed');
+    console.log('GROUNDED_REPL_SIGNAL_OK');
+  `;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    encoding: 'utf8', timeout: 15000,
+  });
+  assert.equal(output.trim(), 'GROUNDED_REPL_SIGNAL_OK');
 });
 
 test('expired tickets and cancelled signals stop before input; slow preparation issues no ticket', async () => {

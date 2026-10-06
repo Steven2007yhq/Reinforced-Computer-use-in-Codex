@@ -2,6 +2,13 @@
 
 ## 0.4.0 — 2026-10-05
 
+- Fix explicit cancellation-signal validation during the 2026-10-06 upload.
+  Node 22 could accept a duck-typed object where Node 24 rejected it in
+  `AbortSignal.any()`. Reject invalid, forged or proxy signals before provider
+  calls; reserve and consume commit tickets before caller-owned signal access,
+  without invoking scope/input/verification callbacks for invalid signals.
+  Add three regressions and expand malformed/reentrant signal cases; the full
+  140-test suite passes locally on Node 22.23.3 and Node 24.14.0.
 - Add `createWorkflow()` for local ordered stages, strict independent stage and
   final verification, bounded chunks, and revision-bound handoff tickets.
   Resuming verifies the pending result without replaying its action attempt.

@@ -1,4 +1,5 @@
 import {validateChoice} from './provider.mjs';
+import {types} from 'node:util';
 
 const tickets = new WeakMap();
 const KINDS = new Set(['click', 'fill', 'scroll', 'key']);
@@ -6,6 +7,17 @@ const SENSITIVE = /password|passwd|api[_ -]?key|secret|credentials?|access.?toke
 const CONSEQUENTIAL = /发送|发布|提交|支付|付款|购买|下单|删除|清空|授权|允许|上传|登录|安装|同意|转账|订阅|退订|创建账户|人机验证|send\b|publish\b|submit\b|pay\b|purchase\b|buy\b|delete\b|erase\b|grant\b|allow\b|upload\b|sign.?in|log.?in|install\b|accept\b|transfer\b|checkout\b|subscribe\b|unsubscribe\b|create.?account|captcha/i;
 const ID = /^[a-z][a-z0-9_-]{0,63}$/i;
 const MODEL = /^(?:~?typesafe\/)?jev-[a-z0-9.-]{1,80}$/;
+const abortedGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted').get;
+
+function validateSignal(signal) {
+  if (signal === undefined) return;
+  try {
+    // Node 22 can accept duck-typed signals in AbortSignal.any(). Require a
+    // genuine, unwrapped signal before reading it or composing cancellation.
+    if (types.isProxy(signal) || !(signal instanceof AbortSignal)
+        || signal.aborted !== abortedGetter.call(signal)) throw new Error();
+  } catch { throw new Error('GROUNDED_INVALID_SIGNAL'); }
+}
 
 function redact(value) {
   return value.replace(/\b(?:sk-|ts_|tsp_)[A-Za-z0-9_-]{10,}\b/g, '[credential removed]')
@@ -71,6 +83,7 @@ async function withSignal(promise, signal) {
 export async function prepare({plannerGoal, targetName, observation, scope, candidates, shareWithPlanner, client,
   minConfidence = 0.65, ttlMs = 30000, signal} = {}) {
   if (shareWithPlanner !== true || typeof client !== 'function') throw new Error('GROUNDED_PLANNER_NOT_SCOPED');
+  validateSignal(signal);
   const goal = redact(text(plannerGoal, 'GOAL', 2048));
   const target = redact(text(targetName, 'TARGET_NAME', 256));
   const observed = observations(observation);
@@ -121,16 +134,26 @@ export async function commit(ticket, {execute, verify, scopeCheck, signal} = {})
   const finish = (status, extra = {}) => result(status, {executed: false, verified: false, ...record.meta, ...extra});
   if (record.state === 'committing') return finish('busy');
   if (record.state !== 'ready') return finish(record.state === 'cancelled' ? 'cancelled' : 'ticket_consumed');
+  // Reserve before inspecting caller-owned signals or invoking any async callback.
+  record.state = 'committing';
   const interrupted = () => record.controller.signal.aborted || record.signal?.aborted || signal?.aborted ? 'cancelled'
     : performance.now() >= record.expiresAt ? 'expired' : null;
-  const early = interrupted();
-  if (early) { record.state = early; return finish(early); }
+  try {
+    validateSignal(record.signal);
+    validateSignal(signal);
+    const early = interrupted();
+    if (early) { record.state = early; return finish(early); }
+  } catch {
+    // Even a throwing aborted accessor is a failed commit attempt, not a
+    // reusable ready ticket. No local callback has been invoked here.
+    record.state = 'consumed';
+    return finish('needs_inspection', {reason: 'The supplied cancellation signal was invalid.'});
+  }
   if ([execute, verify, scopeCheck].some(callback => typeof callback !== 'function')) {
     record.state = 'consumed';
     throw new Error('GROUNDED_CALLBACKS_REQUIRED');
   }
-  // Reserve before any async callback. Neither an error nor a failed verifier can replay this ticket.
-  record.state = 'committing';
+  // Neither an error nor a failed verifier can replay the reserved ticket.
   let executed = false;
   let phase = 'scope';
   try {

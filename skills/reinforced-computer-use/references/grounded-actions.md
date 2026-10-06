@@ -33,6 +33,13 @@ cancelled, expired, `DONE` or `BLOCKED` response provides no executable ticket.
 `DONE` remains advisory and requires independent verification outside the helper.
 There is one provider call, with no automatic retry.
 
+When supplied, `signal` must be a genuine, unwrapped `AbortSignal` from the
+module's runtime; fake objects, prototype forgeries, proxies and invalid
+`aborted` accessors are rejected explicitly on both Node 22 and Node 24.
+Invalid preparation signals throw `GROUNDED_INVALID_SIGNAL` before any provider
+call. An invalid commit signal returns `needs_inspection`, consumes the ticket
+and invokes none of the scope, execution or verification callbacks.
+
 Capture fresh state through the documented Computer Use API in an
 observation-only cell, then end that cell. Codex inspects the displayed result
 and confirms the exact window, workflow stage, and the same selected semantic
